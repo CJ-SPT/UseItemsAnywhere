@@ -1,13 +1,13 @@
-﻿using BepInEx;
+﻿using System;
+using BepInEx;
 using DrakiaXYZ.VersionChecker;
 using EFT.InventoryLogic;
 using HarmonyLib;
-using System;
 using static UseItemsAnywhere.Patches.UseItemsFromAnywhere;
 
-namespace UseItemsFromAnywhere
+namespace UseItemsAnywhere
 {
-    [BepInPlugin("com.dirtbikercj.useFromAnywhere", "Use items anywhere", "1.3.0")]
+    [BepInPlugin("com.cj.useFromAnywhere", "Use items anywhere", "1.3.0")]
     [BepInDependency("com.SPT.custom", "4.0.0")]
     public class Plugin : BaseUnityPlugin
     {
