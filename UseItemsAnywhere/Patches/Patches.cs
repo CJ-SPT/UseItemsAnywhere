@@ -1,11 +1,10 @@
 ﻿using System.Collections.Generic;
+using System.Reflection;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
-using System.Linq;
-using System.Reflection;
 
-namespace UseItemsFromAnywhere;
+namespace UseItemsAnywhere.Patches;
 
 public class UseItemsFromAnywhere
 {

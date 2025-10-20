@@ -3,15 +3,15 @@ using DrakiaXYZ.VersionChecker;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using System;
-using static UseItemsFromAnywhere.UseItemsFromAnywhere;
+using static UseItemsAnywhere.Patches.UseItemsFromAnywhere;
 
 namespace UseItemsFromAnywhere
 {
-    [BepInPlugin("com.dirtbikercj.useFromAnywhere", "Use items anywhere", "1.1.3")]
-    [BepInDependency("com.SPT.custom", "3.11.0")]
+    [BepInPlugin("com.dirtbikercj.useFromAnywhere", "Use items anywhere", "1.3.0")]
+    [BepInDependency("com.SPT.custom", "4.0.0")]
     public class Plugin : BaseUnityPlugin
     {
-        public const int TarkovVersion = 35392;
+        public const int TarkovVersion = 40087;
         
         private static EquipmentSlot[] _extendedFastAccessSlots =
         {
