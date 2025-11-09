@@ -3,7 +3,7 @@ using BepInEx;
 using DrakiaXYZ.VersionChecker;
 using EFT.InventoryLogic;
 using HarmonyLib;
-using static UseItemsAnywhere.Patches.UseItemsFromAnywhere;
+using static UseItemsAnywhere.Patches.UseItemsFromAnywherePatches;
 
 namespace UseItemsAnywhere
 {
