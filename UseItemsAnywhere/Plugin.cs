@@ -7,20 +7,20 @@ using static UseItemsAnywhere.Patches.UseItemsFromAnywherePatches;
 
 namespace UseItemsAnywhere
 {
-    [BepInPlugin("com.cj.useFromAnywhere", "Use items anywhere", "1.3.0")]
+    [BepInPlugin("com.cj.useFromAnywhere", "Use items anywhere", "1.3.1")]
     [BepInDependency("com.SPT.custom", "4.0.0")]
     public class Plugin : BaseUnityPlugin
     {
         public const int TarkovVersion = 40087;
         
-        private static EquipmentSlot[] _extendedFastAccessSlots =
-        {
+        private static readonly EquipmentSlot[] ExtendedFastAccessSlots =
+        [
             EquipmentSlot.Pockets,
             EquipmentSlot.TacticalVest,
             EquipmentSlot.Backpack,
             EquipmentSlot.SecuredContainer,
             EquipmentSlot.ArmBand
-        };
+        ];
 
         internal void Awake()
         {
@@ -31,8 +31,8 @@ namespace UseItemsAnywhere
             
             DontDestroyOnLoad(this);
 
-            var fastAccessSlots = AccessTools.Field(typeof(Inventory), "FastAccessSlots");
-            fastAccessSlots.SetValue(fastAccessSlots, _extendedFastAccessSlots);
+            var fastAccessSlots = AccessTools.Field(typeof(Inventory), nameof(Inventory.FastAccessSlots));
+            fastAccessSlots.SetValue(fastAccessSlots, ExtendedFastAccessSlots);
 
             new IsAtBindablePlace().Enable();
             new IsAtReachablePlace().Enable();
