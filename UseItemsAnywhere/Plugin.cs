@@ -3,7 +3,7 @@ using BepInEx;
 using DrakiaXYZ.VersionChecker;
 using EFT.InventoryLogic;
 using HarmonyLib;
-using static UseItemsAnywhere.Patches.UseItemsFromAnywherePatches;
+using SPT.Reflection.Patching;
 
 namespace UseItemsAnywhere
 {
@@ -34,8 +34,8 @@ namespace UseItemsAnywhere
             var fastAccessSlots = AccessTools.Field(typeof(Inventory), nameof(Inventory.FastAccessSlots));
             fastAccessSlots.SetValue(fastAccessSlots, ExtendedFastAccessSlots);
 
-            new IsAtBindablePlace().Enable();
-            new IsAtReachablePlace().Enable();
+            var patchManager = new PatchManager(this, true);
+            patchManager.EnablePatches();
         }
     }
 }
