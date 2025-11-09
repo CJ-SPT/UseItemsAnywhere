@@ -8,8 +8,6 @@ namespace UseItemsAnywhere.Patches;
 
 internal class GrenadeThrowingSlotsPatch : ModulePatch
 {
-    private static List<Slot>? _grenadeSlots = [];
-
     protected override MethodBase GetTargetMethod()
     {
         return AccessTools.PropertyGetter(typeof(InventoryEquipment), nameof(InventoryEquipment.GrenadeThrowingSlots));
@@ -18,14 +16,16 @@ internal class GrenadeThrowingSlotsPatch : ModulePatch
     [PatchPrefix]
     public static bool PatchPrefix(InventoryEquipment __instance, ref IReadOnlyList<Slot> __result)
     { 
-        _grenadeSlots ??=
-        [
+        __instance.PaymentSlots_1 ??= new List<Slot>
+        {
+            __instance.GetSlot(EquipmentSlot.Backpack),
             __instance.GetSlot(EquipmentSlot.TacticalVest),
             __instance.GetSlot(EquipmentSlot.Pockets),
+            __instance.GetSlot(EquipmentSlot.SecuredContainer),
             __instance.GetSlot(EquipmentSlot.ArmBand)
-        ];
+        };
 
-        __result = _grenadeSlots;
+        __result = __instance.PaymentSlots_1;
         return false;
     }
 }
