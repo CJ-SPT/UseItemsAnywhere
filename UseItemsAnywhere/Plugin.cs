@@ -7,19 +7,19 @@ using SPT.Reflection.Patching;
 
 namespace UseItemsAnywhere
 {
-    [BepInPlugin("com.cj.useFromAnywhere", "Use items anywhere", "1.3.2")]
-    [BepInDependency("com.SPT.custom", "4.0.0")]
+    [BepInPlugin("com.cj.useFromAnywhere", "Use items anywhere", "1.4.0")]
+    [BepInDependency("com.SPT.custom", "4.1.0")]
     public class Plugin : BaseUnityPlugin
     {
-        public const int TarkovVersion = 40087;
-        
+        public const int TarkovVersion = 40743;
+
         private static readonly EquipmentSlot[] ExtendedFastAccessSlots =
         [
             EquipmentSlot.Pockets,
             EquipmentSlot.TacticalVest,
             EquipmentSlot.Backpack,
             EquipmentSlot.SecuredContainer,
-            EquipmentSlot.ArmBand
+            EquipmentSlot.ArmBand,
         ];
 
         internal void Awake()
@@ -28,10 +28,13 @@ namespace UseItemsAnywhere
             {
                 throw new Exception("Invalid EFT Version");
             }
-            
+
             DontDestroyOnLoad(this);
 
-            var fastAccessSlots = AccessTools.Field(typeof(Inventory), nameof(Inventory.FastAccessSlots));
+            var fastAccessSlots = AccessTools.Field(
+                typeof(Inventory),
+                nameof(Inventory.FastAccessSlots)
+            );
             fastAccessSlots.SetValue(fastAccessSlots, ExtendedFastAccessSlots);
 
             var patchManager = new PatchManager(this, true);
