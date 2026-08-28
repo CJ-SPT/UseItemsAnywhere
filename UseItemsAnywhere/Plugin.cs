@@ -4,6 +4,7 @@ using DrakiaXYZ.VersionChecker;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.Patches;
 
 namespace UseItemsAnywhere
 {
@@ -40,6 +41,14 @@ namespace UseItemsAnywhere
 
             var patchManager = new PatchManager(this, true);
             patchManager.EnablePatches();
+        }
+
+        internal void Update()
+        {
+            if (Configuration.ClearItemAccessDelay.Value.IsDown())
+            {
+                ItemAccessDelayPatch.ClearPendingItemAccess();
+            }
         }
     }
 }

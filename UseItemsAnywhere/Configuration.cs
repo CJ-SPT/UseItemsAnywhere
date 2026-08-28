@@ -23,6 +23,8 @@ public static class Configuration
     
     public static ConfigEntry<bool> EnableSlotDelays; 
     public static ConfigEntry<bool> ShowTimerPanel; 
+    public static ConfigEntry<KeyboardShortcut> ClearItemAccessDelay;
+    public static ConfigEntry<float> AdditionalContainerNestingDelay;
 
     public static readonly HashSet<MongoID> FlareIds =
     [
@@ -122,6 +124,22 @@ public static class Configuration
                     CustomDrawer = EquipmentSlotListDrawer,
                 })));
         
+        ConfigEntries.Add(FlareSlots = configFile.Bind(
+            SlotConfigurations,
+            "Flare Slots",
+            new List<EquipmentSlot>
+            {
+                EquipmentSlot.TacticalVest,
+                EquipmentSlot.Pockets,
+            },
+            new ConfigDescription(
+                "Configures which slots can supply flares.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes
+                {
+                    CustomDrawer = EquipmentSlotListDrawer,
+                })));
+        
         ConfigEntries.Add(MedsSlots = configFile.Bind(
             SlotConfigurations,
             "Meds Slots",
@@ -174,6 +192,24 @@ public static class Configuration
                 "Configures whether or not to show the item delay panel.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(ClearItemAccessDelay = configFile.Bind(
+            SlotAccessDelays,
+            "Clear Item Access Delay",
+            KeyboardShortcut.Empty,
+            new ConfigDescription(
+                "Key used to cancel the currently queued item use and clear its access delay.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(AdditionalContainerNestingDelay = configFile.Bind(
+            SlotAccessDelays,
+            "Additional Backpack Nesting Delay",
+            0.5f,
+            new ConfigDescription(
+                "Additional delay, in seconds, for each container layer between the item and the equipped backpack, regardless of container type.",
+                new AcceptableValueRange<float>(0f, 5f),
+                new VersionChecker.ConfigurationManagerAttributes())));
         
         BindSlotAccessDelay(configFile, EquipmentSlot.Pockets, "Pockets", 0f);
         BindSlotAccessDelay(configFile, EquipmentSlot.TacticalVest, "Tactical Vest", 0.25f);
@@ -188,8 +224,37 @@ public static class Configuration
         {
             if (inventory.GetItemsInSlots([slot]).Contains(item))
             {
-                return delayConfiguration.Value;
+                var nestingDelay = slot == EquipmentSlot.Backpack
+                    ? GetBackpackNestingDelay(inventory, item)
+                    : 0f;
+
+                return delayConfiguration.Value + nestingDelay;
             }
+        }
+
+        return 0f;
+    }
+
+    private static float GetBackpackNestingDelay(Inventory inventory, Item item)
+    {
+        var equippedBackpack = inventory.Equipment
+            .GetSlot(EquipmentSlot.Backpack)
+            .ContainedItem;
+
+        if (equippedBackpack == null)
+        {
+            return 0f;
+        }
+
+        var nestingDepth = 0;
+        foreach (var parentItem in item.GetAllParentItems())
+        {
+            if (ReferenceEquals(parentItem, equippedBackpack))
+            {
+                return nestingDepth * AdditionalContainerNestingDelay.Value;
+            }
+
+            nestingDepth++;
         }
 
         return 0f;

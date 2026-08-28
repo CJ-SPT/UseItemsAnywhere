@@ -15,8 +15,16 @@ namespace UseItemsAnywhere.Patches;
 /// </summary>
 internal sealed class ItemAccessDelayPatch : ModulePatch
 {
-    private static readonly HashSet<Player> PendingPlayers = [];
+    private static readonly Dictionary<Player, PendingAccess> PendingPlayers = [];
     private static readonly HashSet<Player> BypassPlayers = [];
+
+    internal static void ClearPendingItemAccess()
+    {
+        foreach (var pendingAccess in PendingPlayers.Values)
+        {
+            pendingAccess.IsCancelled = true;
+        }
+    }
 
     protected override MethodBase GetTargetMethod()
     {
@@ -54,14 +62,17 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             return true;
         }
 
-        if (PendingPlayers.Add(__instance))
+        if (!PendingPlayers.ContainsKey(__instance))
         {
+            var pendingAccess = new PendingAccess();
+            PendingPlayers.Add(__instance, pendingAccess);
             __instance.StartCoroutine(ProceedAfterDelay(
                 __instance,
                 item,
                 completeCallback,
                 scheduled,
-                delay));
+                delay,
+                pendingAccess));
         }
 
         return false;
@@ -92,7 +103,8 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         Item item,
         Callback<IHandsController> completeCallback,
         bool scheduled,
-        float delay)
+        float delay,
+        PendingAccess pendingAccess)
     {
         var playerOwner = ((LocalGame)Singleton<IBotGame>.Instance).PlayerOwner;
 
@@ -103,9 +115,13 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                 playerOwner.ShowObjectivesPanel(GetTimerText(item), delay);
             }
 
-            yield return new WaitForSeconds(delay);
+            var delayEndTime = Time.time + delay;
+            while (Time.time < delayEndTime && !pendingAccess.IsCancelled)
+            {
+                yield return null;
+            }
 
-            if (!player)
+            if (pendingAccess.IsCancelled || !player)
             {
                 yield break;
             }
@@ -123,6 +139,11 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             PendingPlayers.Remove(player);
             BypassPlayers.Remove(player);
         }
+    }
+
+    private sealed class PendingAccess
+    {
+        internal bool IsCancelled;
     }
     
     private static string GetTimerText(Item item)
