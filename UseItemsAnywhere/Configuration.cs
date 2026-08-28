@@ -134,7 +134,7 @@ public static class Configuration
         ConfigEntries.Add(EnableSlotDelays = configFile.Bind(
             SlotAccessDelays,
             "Enable Slot Delays",
-            true,
+            false,
             new ConfigDescription(
                 "Configures whether or not to use the configurable delays below when using items from those slots.",
                 null,
