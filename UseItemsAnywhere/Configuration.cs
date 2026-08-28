@@ -11,6 +11,7 @@ namespace UseItemsAnywhere;
 public static class Configuration
 {
     private static readonly List<ConfigEntryBase> ConfigEntries = [];
+    private static readonly Dictionary<EquipmentSlot, ConfigEntry<float>> SlotAccessDelayConfigurations = [];
 
     private static readonly (EquipmentSlot Slot, string DisplayName)[] ConfigurableSlots =
     [
@@ -25,6 +26,7 @@ public static class Configuration
         [EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster];
     
     private const string SlotConfigurations = "Slot Configurations";
+    private const string SlotAccessDelays = "Slot Access Delays";
     private const float SlotToggleWidth = 135f;
     
     public static ConfigEntry<List<EquipmentSlot>> WeaponSlots; 
@@ -32,12 +34,23 @@ public static class Configuration
     public static ConfigEntry<List<EquipmentSlot>> ReloadSlots;
     public static ConfigEntry<List<EquipmentSlot>> MedsSlots;
     public static ConfigEntry<List<EquipmentSlot>> AllOtherItems; 
+    
+    public static ConfigEntry<bool> EnableSlotDelays; 
+    public static ConfigEntry<bool> ShowTimerPanel; 
 
     public static void Init(ConfigFile configFile)
     {
         AddEquipmentSlotListConverter();
 
-        ConfigEntries.Add(WeaponSlots = configFile.Bind(
+        InitSlotUsage(configFile);
+        InitSlotAccessDelay(configFile);
+        
+        RecalcOrder();
+    }
+
+    private static void InitSlotUsage(ConfigFile configFile)
+    {
+         ConfigEntries.Add(WeaponSlots = configFile.Bind(
             SlotConfigurations,
             "Weapon Slots",
             new List<EquipmentSlot>
@@ -114,8 +127,65 @@ public static class Configuration
                 {
                     CustomDrawer = EquipmentSlotListDrawer,
                 })));
+    }
+
+    private static void InitSlotAccessDelay(ConfigFile configFile)
+    {
+        ConfigEntries.Add(EnableSlotDelays = configFile.Bind(
+            SlotAccessDelays,
+            "Enable Slot Delays",
+            true,
+            new ConfigDescription(
+                "Configures whether or not to use the configurable delays below when using items from those slots.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
         
-        RecalcOrder();
+        ConfigEntries.Add(ShowTimerPanel = configFile.Bind(
+            SlotAccessDelays,
+            "Show Timer Panel",
+            true,
+            new ConfigDescription(
+                "Configures whether or not to show the item delay panel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+        
+        BindSlotAccessDelay(configFile, EquipmentSlot.Pockets, "Pockets", 0f);
+        BindSlotAccessDelay(configFile, EquipmentSlot.TacticalVest, "Tactical Vest", 0.25f);
+        BindSlotAccessDelay(configFile, EquipmentSlot.ArmBand, "Arm Band", 0.5f);
+        BindSlotAccessDelay(configFile, EquipmentSlot.Backpack, "Backpack", 1.5f);
+        BindSlotAccessDelay(configFile, EquipmentSlot.SecuredContainer, "Secured Container", 2f);
+    }
+    
+    internal static float GetItemAccessDelay(Inventory inventory, Item item)
+    {
+        foreach (var (slot, delayConfiguration) in SlotAccessDelayConfigurations)
+        {
+            if (inventory.GetItemsInSlots([slot]).Contains(item))
+            {
+                return delayConfiguration.Value;
+            }
+        }
+
+        return 0f;
+    }
+
+    private static void BindSlotAccessDelay(
+        ConfigFile configFile,
+        EquipmentSlot slot,
+        string displayName,
+        float defaultDelay)
+    {
+        var entry = configFile.Bind(
+            SlotAccessDelays,
+            $"{displayName} Delay",
+            defaultDelay,
+            new ConfigDescription(
+                $"Additional delay, in seconds, before using a consumable stored in {displayName.ToLowerInvariant()}.",
+                new AcceptableValueRange<float>(0f, 5f),
+                new VersionChecker.ConfigurationManagerAttributes()));
+
+        SlotAccessDelayConfigurations[slot] = entry;
+        ConfigEntries.Add(entry);
     }
 
     private static void AddEquipmentSlotListConverter()
