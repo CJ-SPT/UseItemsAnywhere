@@ -4,10 +4,11 @@ using DrakiaXYZ.VersionChecker;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.Patches;
 
 namespace UseItemsAnywhere
 {
-    [BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.0.0")]
+    [BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.0.1")]
     [BepInDependency("com.SPT.custom", "4.1.0")]
     public class Plugin : BaseUnityPlugin
     {
@@ -40,6 +41,14 @@ namespace UseItemsAnywhere
 
             var patchManager = new PatchManager(this, true);
             patchManager.EnablePatches();
+        }
+
+        internal void Update()
+        {
+            if (Configuration.ClearItemAccessDelay.Value.IsDown())
+            {
+                ItemAccessDelayPatch.ClearPendingItemAccess();
+            }
         }
     }
 }
