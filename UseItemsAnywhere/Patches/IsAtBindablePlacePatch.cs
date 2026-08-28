@@ -17,7 +17,7 @@ public class IsAtBindablePlace : ModulePatch
         new("6217726288ed9f0845317459"), // green Flare
         new("62178be9d0050232da3485d9"), // white Flare
     ];
-
+    
     protected override MethodBase GetTargetMethod()
     {
         return AccessTools.Method(
@@ -35,9 +35,29 @@ public class IsAtBindablePlace : ModulePatch
             return;
         }
 
-        if (IsValidItemForBinding(item) && __instance.Examined(item))
+        if (!IsValidItemForBinding(item) || !__instance.Examined(item))
         {
-            __result = __instance.Inventory.Equipment.Contains(item);
+            return;
+        }
+        
+        switch (item)
+        {
+            case Weapon:
+                __result = __instance.Inventory.GetItemsInSlots([..Configuration.DefaultWeaponSlots, ..Configuration.WeaponSlots.Value]).Contains(item);
+                return;
+            case ThrowWeap:
+                __result = __instance.Inventory.GetItemsInSlots(Configuration.GrenadeThrowSlots.Value).Contains(item);
+                return;
+            case Ammo:
+            case Magazine:
+                __result = __instance.Inventory.GetItemsInSlots(Configuration.ReloadSlots.Value).Contains(item);
+                return;
+            case Meds:
+                __result = __instance.Inventory.GetItemsInSlots(Configuration.MedsSlots.Value).Contains(item);
+                return;
+            default:
+                __result = __instance.Inventory.GetItemsInSlots(Configuration.AllOtherItems.Value).Contains(item);
+                return;
         }
     }
 

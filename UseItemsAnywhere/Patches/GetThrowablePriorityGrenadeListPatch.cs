@@ -23,50 +23,11 @@ internal class GetThrowablePriorityGrenadesListPatch : ModulePatch
         InventoryController inventoryController
     )
     {
-        var list = new List<CompoundItem>();
-        if (
-            inventoryController
-                .Inventory.Equipment.GetSlot(EquipmentSlot.TacticalVest)
-                .ContainedItem
-            is CompoundItem compoundItem
-        )
-        {
-            list.Add(compoundItem);
-        }
-
-        if (
-            inventoryController.Inventory.Equipment.GetSlot(EquipmentSlot.Pockets).ContainedItem
-            is CompoundItem compoundItem2
-        )
-        {
-            list.Add(compoundItem2);
-        }
-
-        if (
-            inventoryController.Inventory.Equipment.GetSlot(EquipmentSlot.ArmBand).ContainedItem
-            is CompoundItem compoundItem3
-        )
-        {
-            list.Add(compoundItem3);
-        }
-
-        if (
-            inventoryController
-                .Inventory.Equipment.GetSlot(EquipmentSlot.SecuredContainer)
-                .ContainedItem
-            is CompoundItem compoundItem4
-        )
-        {
-            list.Add(compoundItem4);
-        }
-
-        if (
-            inventoryController.Inventory.Equipment.GetSlot(EquipmentSlot.Backpack).ContainedItem
-            is CompoundItem compoundItem5
-        )
-        {
-            list.Add(compoundItem5);
-        }
+        var list = Configuration.GrenadeThrowSlots.Value
+            .Select(slot => inventoryController.Inventory.Equipment.GetSlot(slot).ContainedItem)
+            .OfType<CompoundItem>()
+            .Distinct()
+            .ToList();
 
         var list2 = list.GetTopLevelItems()
             .OfType<ThrowWeap>()
