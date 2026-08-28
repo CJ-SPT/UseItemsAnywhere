@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using EFT.InventoryLogic;
 using HarmonyLib;
@@ -8,6 +9,8 @@ namespace UseItemsAnywhere.Patches;
 
 internal class GrenadeThrowingSlotsPatch : ModulePatch
 {
+    private static HashSet<Slot>? _grenadeThrowingSlots;
+    
     protected override MethodBase GetTargetMethod()
     {
         return AccessTools.PropertyGetter(
@@ -19,16 +22,21 @@ internal class GrenadeThrowingSlotsPatch : ModulePatch
     [PatchPrefix]
     public static bool PatchPrefix(InventoryEquipment __instance, ref IReadOnlyList<Slot> __result)
     {
-        __instance._paymentSlots ??= new List<Slot>
+        if (_grenadeThrowingSlots == null)
         {
-            __instance.GetSlot(EquipmentSlot.Backpack),
-            __instance.GetSlot(EquipmentSlot.TacticalVest),
-            __instance.GetSlot(EquipmentSlot.Pockets),
-            __instance.GetSlot(EquipmentSlot.SecuredContainer),
-            __instance.GetSlot(EquipmentSlot.ArmBand),
-        };
-
-        __result = __instance._paymentSlots;
+            _grenadeThrowingSlots = [];
+        }
+        else
+        {
+            _grenadeThrowingSlots.Clear();
+        }
+        
+        foreach (var eSlot in Configuration.GrenadeThrowSlots.Value)
+        {
+            _grenadeThrowingSlots.Add(__instance.GetSlot(eSlot));
+        }
+        
+        __result = [.._grenadeThrowingSlots];
         return false;
     }
 }
