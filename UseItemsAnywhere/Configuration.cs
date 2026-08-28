@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using BepInEx.Configuration;
 using DrakiaXYZ.VersionChecker;
+using EFT;
 using EFT.InventoryLogic;
 using UnityEngine;
 
@@ -10,9 +11,34 @@ namespace UseItemsAnywhere;
 
 public static class Configuration
 {
+    public static readonly HashSet<EquipmentSlot> DefaultWeaponSlots =
+        [EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster];
+    
+    public static ConfigEntry<List<EquipmentSlot>> WeaponSlots; 
+    public static ConfigEntry<List<EquipmentSlot>> GrenadeThrowSlots; 
+    public static ConfigEntry<List<EquipmentSlot>> FlareSlots; 
+    public static ConfigEntry<List<EquipmentSlot>> ReloadSlots;
+    public static ConfigEntry<List<EquipmentSlot>> MedsSlots;
+    public static ConfigEntry<List<EquipmentSlot>> AllOtherItems; 
+    
+    public static ConfigEntry<bool> EnableSlotDelays; 
+    public static ConfigEntry<bool> ShowTimerPanel; 
+
+    public static readonly HashSet<MongoID> FlareIds =
+    [
+        new("62178c4d4ecf221597654e3d"), // Red Flare
+        new("624c0b3340357b5f566e8766"), // Yellow Flare
+        new("6217726288ed9f0845317459"), // green Flare
+        new("62178be9d0050232da3485d9"), // white Flare
+    ];
+    
     private static readonly List<ConfigEntryBase> ConfigEntries = [];
     private static readonly Dictionary<EquipmentSlot, ConfigEntry<float>> SlotAccessDelayConfigurations = [];
 
+    private const string SlotConfigurations = "Slot Configurations";
+    private const string SlotAccessDelays = "Slot Access Delays";
+    private const float SlotToggleWidth = 135f;
+    
     private static readonly (EquipmentSlot Slot, string DisplayName)[] ConfigurableSlots =
     [
         (EquipmentSlot.TacticalVest, "Tactical Vest"),
@@ -21,23 +47,7 @@ public static class Configuration
         (EquipmentSlot.SecuredContainer, "Secured Container"),
         (EquipmentSlot.ArmBand, "Arm Band"),
     ];
-
-    public static readonly HashSet<EquipmentSlot> DefaultWeaponSlots =
-        [EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster];
     
-    private const string SlotConfigurations = "Slot Configurations";
-    private const string SlotAccessDelays = "Slot Access Delays";
-    private const float SlotToggleWidth = 135f;
-    
-    public static ConfigEntry<List<EquipmentSlot>> WeaponSlots; 
-    public static ConfigEntry<List<EquipmentSlot>> GrenadeThrowSlots; 
-    public static ConfigEntry<List<EquipmentSlot>> ReloadSlots;
-    public static ConfigEntry<List<EquipmentSlot>> MedsSlots;
-    public static ConfigEntry<List<EquipmentSlot>> AllOtherItems; 
-    
-    public static ConfigEntry<bool> EnableSlotDelays; 
-    public static ConfigEntry<bool> ShowTimerPanel; 
-
     public static void Init(ConfigFile configFile)
     {
         AddEquipmentSlotListConverter();
@@ -74,6 +84,22 @@ public static class Configuration
             },
             new ConfigDescription(
                 "Configures which slots can supply grenades.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes
+                {
+                    CustomDrawer = EquipmentSlotListDrawer,
+                })));
+        
+        ConfigEntries.Add(FlareSlots = configFile.Bind(
+            SlotConfigurations,
+            "Flare Slots",
+            new List<EquipmentSlot>
+            {
+                EquipmentSlot.TacticalVest,
+                EquipmentSlot.Pockets,
+            },
+            new ConfigDescription(
+                "Configures which slots can supply flares.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes
                 {

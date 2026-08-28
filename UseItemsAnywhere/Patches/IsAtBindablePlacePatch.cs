@@ -4,20 +4,14 @@ using System.Reflection;
 using EFT;
 using EFT.InventoryLogic;
 using HarmonyLib;
+using MultiFlare;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.Extensions;
 
 namespace UseItemsAnywhere.Patches;
 
 public class IsAtBindablePlace : ModulePatch
 {
-    private static readonly HashSet<MongoID> Items =
-    [
-        new("62178c4d4ecf221597654e3d"), // Red Flare
-        new("624c0b3340357b5f566e8766"), // Yellow Flare
-        new("6217726288ed9f0845317459"), // green Flare
-        new("62178be9d0050232da3485d9"), // white Flare
-    ];
-    
     protected override MethodBase GetTargetMethod()
     {
         return AccessTools.Method(
@@ -42,21 +36,27 @@ public class IsAtBindablePlace : ModulePatch
         
         switch (item)
         {
-            case Weapon:
-                __result = __instance.Inventory.GetItemsInSlots([..Configuration.DefaultWeaponSlots, ..Configuration.WeaponSlots.Value]).Contains(item);
+            case Weapon weap:
+                if (Configuration.FlareIds.Contains(weap.TemplateId))
+                {
+                    __result = __instance.Inventory.SlotsContainItem(Configuration.FlareSlots.Value, weap);
+                    return;
+                }
+                
+                __result = __instance.Inventory.SlotsContainItem([..Configuration.DefaultWeaponSlots, ..Configuration.WeaponSlots.Value], item);
                 return;
             case ThrowWeap:
-                __result = __instance.Inventory.GetItemsInSlots(Configuration.GrenadeThrowSlots.Value).Contains(item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.GrenadeThrowSlots.Value, item);
                 return;
             case Ammo:
             case Magazine:
-                __result = __instance.Inventory.GetItemsInSlots(Configuration.ReloadSlots.Value).Contains(item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ReloadSlots.Value, item);
                 return;
             case Meds:
-                __result = __instance.Inventory.GetItemsInSlots(Configuration.MedsSlots.Value).Contains(item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.MedsSlots.Value, item);
                 return;
             default:
-                __result = __instance.Inventory.GetItemsInSlots(Configuration.AllOtherItems.Value).Contains(item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.AllOtherItems.Value, item);
                 return;
         }
     }
@@ -71,6 +71,6 @@ public class IsAtBindablePlace : ModulePatch
             || item is PortableRangeFinder
             || item is RadioTransmitter
             || item.GetItemComponent<KnifeComponent>() != null
-            || Items.Contains(item.TemplateId);
+            || Configuration.FlareIds.Contains(item.TemplateId);
     }
 }

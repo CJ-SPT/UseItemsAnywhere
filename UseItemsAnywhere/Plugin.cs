@@ -7,7 +7,7 @@ using SPT.Reflection.Patching;
 
 namespace UseItemsAnywhere
 {
-    [BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.0.0")]
+    [BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.0.1")]
     [BepInDependency("com.SPT.custom", "4.1.0")]
     public class Plugin : BaseUnityPlugin
     {

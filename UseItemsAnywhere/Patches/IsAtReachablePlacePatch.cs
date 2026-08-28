@@ -3,6 +3,7 @@ using System.Reflection;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.Extensions;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -18,21 +19,27 @@ public class IsAtReachablePlace : ModulePatch
     {
         switch (item)
         {
-            case Weapon:
-                __result = __instance.Inventory.GetItemsInSlots([..Configuration.DefaultWeaponSlots, ..Configuration.WeaponSlots.Value]).Contains(item);
+            case Weapon weap:
+                if (Configuration.FlareIds.Contains(weap.TemplateId))
+                {
+                    __result = __instance.Inventory.SlotsContainItem(Configuration.FlareSlots.Value, weap);
+                    return;
+                }
+                
+                __result = __instance.Inventory.SlotsContainItem([..Configuration.DefaultWeaponSlots, ..Configuration.WeaponSlots.Value], item);
                 return;
             case ThrowWeap:
-                __result = __instance.Inventory.GetItemsInSlots(Configuration.GrenadeThrowSlots.Value).Contains(item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.GrenadeThrowSlots.Value, item);
                 return;
             case Ammo:
             case Magazine:
-                __result = __instance.Inventory.GetItemsInSlots(Configuration.ReloadSlots.Value).Contains(item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ReloadSlots.Value, item);
                 return;
             case Meds:
-                __result = __instance.Inventory.GetItemsInSlots(Configuration.MedsSlots.Value).Contains(item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.MedsSlots.Value, item);
                 return;
             default:
-                __result = __instance.Inventory.GetItemsInSlots(Configuration.AllOtherItems.Value).Contains(item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.AllOtherItems.Value, item);
                 return;
         }
     }

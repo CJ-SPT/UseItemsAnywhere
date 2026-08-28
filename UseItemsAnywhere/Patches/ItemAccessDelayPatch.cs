@@ -33,6 +33,11 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         Callback<IHandsController> completeCallback,
         bool scheduled)
     {
+        if (!Configuration.EnableSlotDelays.Value)
+        {
+            return true;
+        }
+        
         if (BypassPlayers.Remove(__instance))
         {
             return true;
