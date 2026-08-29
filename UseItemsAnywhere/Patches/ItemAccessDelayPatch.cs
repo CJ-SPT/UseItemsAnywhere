@@ -26,6 +26,8 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         }
     }
 
+    internal static bool HasPendingItemAccess(Player player) => PendingPlayers.ContainsKey(player);
+
     protected override MethodBase GetTargetMethod()
     {
         return AccessTools.Method(

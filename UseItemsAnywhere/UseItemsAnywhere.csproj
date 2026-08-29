@@ -1,9 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <AssemblyName>UseItemsFromAnywhere</AssemblyName>
     <Description>Use items from anywhere in the inventory</Description>
-    <Version>2.0.1</Version>
+    <Version>2.1.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
@@ -75,6 +74,9 @@
     <Reference Include="UnityEngine.UIModule">
       <HintPath>$(TarkovManagedDir)UnityEngine.UIModule.dll</HintPath>
     </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.AssetBundleModule.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.AIModule">
       <HintPath>$(TarkovManagedDir)UnityEngine.AIModule.dll</HintPath>
     </Reference>
@@ -113,6 +115,7 @@
 
   <ItemGroup>
     <Folder Include="Utils\" />
+    <BundleFile Include="$(ProjectDir)Resources\quickusewheel" />
   </ItemGroup>
 
   <!-- Gets the commit hash from git -->
@@ -134,14 +137,22 @@
     <!-- Copies the output and resources to tarkov game folder -->
     <Copy
       SourceFiles="@(OutputDLL);"
-      DestinationFolder="$(TarkovDir)BepInEx\plugins\%(RecursiveDir)"
+      DestinationFolder="$(TarkovDir)BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
+    />
+    <Copy
+      SourceFiles="@(BundleFile);"
+      DestinationFolder="$(TarkovDir)BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
     />
 
     <!-- Creates a release zip file -->
     <RemoveDir Directories="$(ProjectDir)release" />
     <Copy
       SourceFiles="@(OutputDLL);"
-      DestinationFolder="$(ProjectDir)release\UseItemsAnywhere\BepInEx\plugins\%(RecursiveDir)"
+      DestinationFolder="$(ProjectDir)release\UseItemsAnywhere\BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
+    />
+    <Copy
+      SourceFiles="@(BundleFile);"
+      DestinationFolder="$(ProjectDir)release\UseItemsAnywhere\BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
     />
     <ZipDirectory
       SourceDirectory="$(ProjectDir)release\UseItemsAnywhere\"

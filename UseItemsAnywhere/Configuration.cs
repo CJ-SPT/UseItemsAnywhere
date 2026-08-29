@@ -25,6 +25,10 @@ public static class Configuration
     public static ConfigEntry<bool> ShowTimerPanel; 
     public static ConfigEntry<KeyboardShortcut> ClearItemAccessDelay;
     public static ConfigEntry<float> AdditionalContainerNestingDelay;
+    public static ConfigEntry<bool> EnableQuickUseWheel;
+    public static ConfigEntry<KeyboardShortcut> QuickUseWheelKey;
+    public static ConfigEntry<int> QuickUseItemsPerPage;
+    public static ConfigEntry<bool> QuickUseShowSourceSlot;
 
     public static readonly HashSet<MongoID> FlareIds =
     [
@@ -39,6 +43,7 @@ public static class Configuration
 
     private const string SlotConfigurations = "Slot Configurations";
     private const string SlotAccessDelays = "Slot Access Delays";
+    private const string QuickUseWheel = "Quick Use Wheel";
     private const float SlotToggleWidth = 135f;
     
     private static readonly (EquipmentSlot Slot, string DisplayName)[] ConfigurableSlots =
@@ -56,8 +61,48 @@ public static class Configuration
 
         InitSlotUsage(configFile);
         InitSlotAccessDelay(configFile);
+        InitQuickUseWheel(configFile);
         
         RecalcOrder();
+    }
+
+    private static void InitQuickUseWheel(ConfigFile configFile)
+    {
+        ConfigEntries.Add(EnableQuickUseWheel = configFile.Bind(
+            QuickUseWheel,
+            "Enable Quick Use Wheel",
+            true,
+            new ConfigDescription(
+                "Configures whether or not the quick-use item wheel is enabled.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseWheelKey = configFile.Bind(
+            QuickUseWheel,
+            "Quick Use Wheel Key",
+            new KeyboardShortcut(KeyCode.H),
+            new ConfigDescription(
+                "Key held to open and select from the quick-use item wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseItemsPerPage = configFile.Bind(
+            QuickUseWheel,
+            "Items Per Page",
+            8,
+            new ConfigDescription(
+                "Maximum number of items displayed on each wheel page.",
+                new AcceptableValueRange<int>(4, 12),
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseShowSourceSlot = configFile.Bind(
+            QuickUseWheel,
+            "Show Source Slot",
+            true,
+            new ConfigDescription(
+                "Configures whether or not each item displays its source equipment slot.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
     }
 
     private static void InitSlotUsage(ConfigFile configFile)
