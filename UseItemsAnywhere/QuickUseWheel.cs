@@ -24,6 +24,10 @@ internal sealed class QuickUseWheel
     private static readonly Color NormalNameColor = new(0.87f, 0.89f, 0.85f, 1f);
     private static readonly EquipmentSlot[] SlotPriority =
     [
+        EquipmentSlot.FirstPrimaryWeapon,
+        EquipmentSlot.SecondPrimaryWeapon,
+        EquipmentSlot.Holster,
+        EquipmentSlot.Scabbard,
         EquipmentSlot.Pockets,
         EquipmentSlot.TacticalVest,
         EquipmentSlot.ArmBand,
@@ -32,6 +36,10 @@ internal sealed class QuickUseWheel
     ];
     private static readonly EquipmentSlot[][] SourceSlotQueries =
     [
+        [EquipmentSlot.FirstPrimaryWeapon],
+        [EquipmentSlot.SecondPrimaryWeapon],
+        [EquipmentSlot.Holster],
+        [EquipmentSlot.Scabbard],
         [EquipmentSlot.Pockets],
         [EquipmentSlot.TacticalVest],
         [EquipmentSlot.ArmBand],
@@ -540,29 +548,71 @@ internal sealed class QuickUseWheel
         {
             foreach (var item in inventory.GetItemsInSlots(SourceSlotQueries[slotIndex]))
             {
-                if (!_sourceSlots.ContainsKey(item))
+                if (item is not null && !_sourceSlots.ContainsKey(item))
                 {
                     _sourceSlots.Add(item, SlotPriority[slotIndex]);
                 }
             }
         }
-
-        foreach (var item in inventory.GetItemsInSlots(Configuration.MedsSlots.Value))
+        
+        // Seperate iterators here because we want search to respect the slots chosen for the provided item
+        if (Configuration.QuickUseShowPrimAndSecWeapons.Value)
         {
-            if (item is Meds && _seenItems.Add(item))
+            foreach (var item in inventory.GetItemsInSlots(Configuration.DefaultWeaponSlots))
             {
-                _candidateItems.Add(item);
+                if (item is Weapon && _seenItems.Add(item))
+                {
+                    _candidateItems.Add(item);
+                }
             }
         }
-
-        foreach (var item in inventory.GetItemsInSlots(Configuration.AllOtherItems.Value))
+        
+        if (Configuration.QuickUseShowMelee.Value)
         {
-            if (item is FoodDrink && _seenItems.Add(item))
+            foreach (var item in inventory.GetItemsInSlots([EquipmentSlot.Scabbard]))
             {
-                _candidateItems.Add(item);
+                if (item is Weapon && _seenItems.Add(item))
+                {
+                    _candidateItems.Add(item);
+                }
             }
         }
-
+        
+        if (Configuration.QuickUseShowMeds.Value)
+        {
+            foreach (var item in inventory.GetItemsInSlots(Configuration.MedsSlots.Value))
+            {
+                if (item is Meds && _seenItems.Add(item))
+                {
+                    _candidateItems.Add(item);
+                }
+            }
+        }
+        
+        if (Configuration.QuickUseShowFoodDrink.Value)
+        {
+            foreach (var item in inventory.GetItemsInSlots(Configuration.FoodDrinkSlots.Value))
+            {
+                if (item is FoodDrink && _seenItems.Add(item))
+                {
+                    _candidateItems.Add(item);
+                }
+            }
+        }
+        
+        if (Configuration.QuickUseShowFlares.Value)
+        {
+            foreach (var item in inventory.GetItemsInSlots(Configuration.FlareSlots.Value))
+            {
+                if (item is not null
+                    && Configuration.FlareIds.Contains(item.TemplateId)
+                    && _seenItems.Add(item))
+                {
+                    _candidateItems.Add(item);
+                }
+            }
+        }
+        
         foreach (var item in _candidateItems)
         {
             if (!controller.Examined(item)

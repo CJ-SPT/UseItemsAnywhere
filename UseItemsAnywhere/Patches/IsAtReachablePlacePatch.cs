@@ -26,7 +26,7 @@ public class IsAtReachablePlace : ModulePatch
                     return;
                 }
                 
-                __result = __instance.Inventory.SlotsContainItem([..Configuration.DefaultWeaponSlots, ..Configuration.WeaponSlots.Value], item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.AllAllowedWeaponSlots, item);
                 return;
             case ThrowWeap:
                 __result = __instance.Inventory.SlotsContainItem(Configuration.GrenadeThrowSlots.Value, item);
@@ -37,6 +37,9 @@ public class IsAtReachablePlace : ModulePatch
                 return;
             case Meds:
                 __result = __instance.Inventory.SlotsContainItem(Configuration.MedsSlots.Value, item);
+                return;
+            case FoodDrink:
+                __result = __instance.Inventory.SlotsContainItem(Configuration.FoodDrinkSlots.Value, item);
                 return;
             default:
                 __result = __instance.Inventory.SlotsContainItem(Configuration.AllOtherItems.Value, item);
