@@ -14,6 +14,9 @@ namespace UseItemsAnywhere
     public class Plugin : BaseUnityPlugin
     {
         private readonly QuickUseWheel _quickUseWheel = new();
+        private readonly ItemUseDelayTimer _itemUseDelayTimer = new();
+
+        internal static ItemUseDelayTimer? DelayTimer { get; private set; }
 
         public const int TarkovVersion = 40743;
 
@@ -35,7 +38,10 @@ namespace UseItemsAnywhere
 
             DontDestroyOnLoad(this);
             Configuration.Init(Config);
-            _quickUseWheel.Initialize(Path.GetDirectoryName(Info.Location)!, Logger, transform);
+            var pluginDirectory = Path.GetDirectoryName(Info.Location)!;
+            _quickUseWheel.Initialize(pluginDirectory, Logger, transform);
+            _itemUseDelayTimer.Initialize(pluginDirectory, Logger, transform);
+            DelayTimer = _itemUseDelayTimer;
             
             var fastAccessSlots = AccessTools.Field(
                 typeof(Inventory),
@@ -55,8 +61,14 @@ namespace UseItemsAnywhere
             }
 
             _quickUseWheel.Update();
+            _itemUseDelayTimer.Update();
         }
 
-        internal void OnDestroy() => _quickUseWheel.OnDestroy();
+        internal void OnDestroy()
+        {
+            DelayTimer = null;
+            _itemUseDelayTimer.OnDestroy();
+            _quickUseWheel.OnDestroy();
+        }
     }
 }

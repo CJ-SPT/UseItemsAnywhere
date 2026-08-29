@@ -59,6 +59,12 @@ public class IsAtBindablePlace : ModulePatch
                 __result = __instance.Inventory.SlotsContainItem(Configuration.FoodDrinkSlots.Value, item);
                 return;
             default:
+                if (item.GetItemComponent<KnifeComponent>() != null)
+                {
+                    __result = __instance.Inventory.SlotsContainItem(Configuration.AllAllowedMeleeSlots, item);
+                    return;
+                }
+                
                 __result = __instance.Inventory.SlotsContainItem(Configuration.AllOtherItems.Value, item);
                 return;
         }

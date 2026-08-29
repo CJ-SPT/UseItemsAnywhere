@@ -569,9 +569,9 @@ internal sealed class QuickUseWheel
         
         if (Configuration.QuickUseShowMelee.Value)
         {
-            foreach (var item in inventory.GetItemsInSlots([EquipmentSlot.Scabbard]))
+            foreach (var item in inventory.GetItemsInSlots(Configuration.AllAllowedMeleeSlots))
             {
-                if (item is Weapon && _seenItems.Add(item))
+                if (item.GetItemComponent<KnifeComponent>() != null && _seenItems.Add(item))
                 {
                     _candidateItems.Add(item);
                 }

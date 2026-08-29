@@ -1,0 +1,330 @@
+using System;
+using System.IO;
+using TMPro;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.UI;
+
+internal static class UseItemsAnywhereQuickUseWheelBuilder
+{
+    private const string RootFolder = "Assets/Mods/UseItemsAnywhere.Assets";
+    private const string UiFolder = RootFolder + "/UI";
+    private const string CirclePath = UiFolder + "/WheelCircle.png";
+    private const string TimerCirclePath = UiFolder + "/ItemUseTimerCircle.png";
+    private const string PrefabPath = UiFolder + "/QuickUseWheel.prefab";
+    private const string TimerPrefabPath = UiFolder + "/ItemUseDelayTimer.prefab";
+    private const string BundleName = "quickusewheel";
+    private const string TimerBundleName = "itemusedelaytimer";
+
+    [MenuItem("SDK/Use Items Anywhere/Build Quick Use Wheel")]
+    internal static void BuildFromMenu() => Build();
+
+    internal static void Build()
+    {
+        Directory.CreateDirectory(UiFolder);
+        CreateCircleSprite(CirclePath);
+        CreateCircleSprite(TimerCirclePath);
+        var circle = AssetDatabase.LoadAssetAtPath<Sprite>(CirclePath);
+        var timerCircle = AssetDatabase.LoadAssetAtPath<Sprite>(TimerCirclePath);
+        if (circle == null || timerCircle == null)
+        {
+            throw new InvalidOperationException("Failed to create a UI circle sprite.");
+        }
+
+        CreatePrefab(circle);
+        CreateItemUseDelayTimerPrefab(timerCircle);
+        var importer = AssetImporter.GetAtPath(PrefabPath);
+        importer.assetBundleName = BundleName;
+        importer.SaveAndReimport();
+        var timerImporter = AssetImporter.GetAtPath(TimerPrefabPath);
+        timerImporter.assetBundleName = TimerBundleName;
+        timerImporter.SaveAndReimport();
+
+        var output = GetArgument("-quickUseWheelOutput");
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            output = Path.GetFullPath(Path.Combine(Application.dataPath, "../Build/UseItemsAnywhereWheel"));
+        }
+
+        Directory.CreateDirectory(output);
+        var builds = new[]
+        {
+            new AssetBundleBuild
+            {
+                assetBundleName = BundleName,
+                assetNames = new[] { PrefabPath, CirclePath },
+            },
+            new AssetBundleBuild
+            {
+                assetBundleName = TimerBundleName,
+                assetNames = new[] { TimerPrefabPath, TimerCirclePath },
+            },
+        };
+        var manifest = BuildPipeline.BuildAssetBundles(
+            output,
+            builds,
+            BuildAssetBundleOptions.UncompressedAssetBundle | BuildAssetBundleOptions.ForceRebuildAssetBundle,
+            BuildTarget.StandaloneWindows64);
+        if (manifest == null)
+        {
+            throw new InvalidOperationException("Unity failed to build the quick-use wheel bundle.");
+        }
+
+        Debug.Log($"Use Items Anywhere UI bundles built at {output}");
+    }
+
+    private static void CreateCircleSprite(string path)
+    {
+        const int size = 512;
+        var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        var pixels = new Color32[size * size];
+        var center = (size - 1) * 0.5f;
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                var distance = Vector2.Distance(new Vector2(x, y), new Vector2(center, center));
+                var alpha = (byte)Mathf.RoundToInt(Mathf.Clamp01(center - distance) * 255f);
+                pixels[y * size + x] = new Color32(255, 255, 255, alpha);
+            }
+        }
+        texture.SetPixels32(pixels);
+        texture.Apply();
+        File.WriteAllBytes(path, texture.EncodeToPNG());
+        UnityEngine.Object.DestroyImmediate(texture);
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+
+        var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+        importer.textureType = TextureImporterType.Sprite;
+        importer.spriteImportMode = SpriteImportMode.Single;
+        importer.spritePixelsPerUnit = size;
+        importer.alphaIsTransparency = true;
+        importer.mipmapEnabled = false;
+        importer.filterMode = FilterMode.Bilinear;
+        importer.wrapMode = TextureWrapMode.Clamp;
+        importer.SaveAndReimport();
+    }
+
+    private static void CreatePrefab(Sprite circle)
+    {
+        var root = new GameObject("QuickUseWheel", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(CanvasGroup));
+        var rootRect = root.GetComponent<RectTransform>();
+        Stretch(rootRect);
+        var canvas = root.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 30000;
+        var scaler = root.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
+        var canvasGroup = root.GetComponent<CanvasGroup>();
+        canvasGroup.alpha = 0f;
+        canvasGroup.blocksRaycasts = false;
+        canvasGroup.interactable = false;
+
+        var backdrop = CreateImage("Backdrop", root.transform, null, new Color(0f, 0f, 0f, 0.24f));
+        Stretch(backdrop.rectTransform);
+
+        var wheelRoot = CreateRect("WheelRoot", root.transform, new Vector2(600f, 600f));
+        wheelRoot.anchorMin = wheelRoot.anchorMax = wheelRoot.pivot = new Vector2(0.5f, 0.5f);
+
+        var shadow = CreateImage("Shadow", wheelRoot, circle, new Color(0f, 0f, 0f, 0.42f));
+        shadow.rectTransform.sizeDelta = new Vector2(566f, 566f);
+
+        var ringBack = CreateImage("RingBack", wheelRoot, circle, new Color(0.018f, 0.024f, 0.023f, 0.58f));
+        ringBack.rectTransform.sizeDelta = new Vector2(548f, 548f);
+
+        var segmentLayer = CreateRect("SegmentLayer", wheelRoot, new Vector2(540f, 540f));
+        var segment = CreateImage("SegmentTemplate", segmentLayer, circle, new Color(0.035f, 0.045f, 0.043f, 0.58f));
+        Stretch(segment.rectTransform);
+        segment.type = Image.Type.Filled;
+        segment.fillMethod = Image.FillMethod.Radial360;
+        segment.fillOrigin = (int)Image.Origin360.Top;
+        segment.fillClockwise = true;
+        segment.raycastTarget = false;
+        segment.gameObject.SetActive(false);
+
+        var itemLayer = CreateRect("ItemLayer", wheelRoot, new Vector2(540f, 540f));
+        var itemTemplate = CreateRect("ItemTemplate", itemLayer, new Vector2(132f, 116f));
+        var icon = CreateImage("Icon", itemTemplate, null, Color.white);
+        icon.rectTransform.sizeDelta = new Vector2(60f, 60f);
+        icon.rectTransform.anchoredPosition = new Vector2(0f, 18f);
+        icon.preserveAspect = true;
+        var itemName = CreateText("Name", itemTemplate, 16f, FontStyles.Bold, Color.white);
+        itemName.rectTransform.sizeDelta = new Vector2(132f, 28f);
+        itemName.rectTransform.anchoredPosition = new Vector2(0f, -25f);
+        var source = CreateText("Source", itemTemplate, 11f, FontStyles.Normal, new Color(0.68f, 0.7f, 0.66f, 1f));
+        source.rectTransform.sizeDelta = new Vector2(132f, 22f);
+        source.rectTransform.anchoredPosition = new Vector2(0f, -47f);
+        itemTemplate.gameObject.SetActive(false);
+
+        var centerBorder = CreateImage("CenterBorder", wheelRoot, circle, new Color(0.16f, 0.19f, 0.18f, 0.62f));
+        centerBorder.rectTransform.sizeDelta = new Vector2(198f, 198f);
+        var center = CreateImage("Center", wheelRoot, circle, new Color(0.018f, 0.025f, 0.024f, 0.76f));
+        center.rectTransform.sizeDelta = new Vector2(188f, 188f);
+        var selectedName = CreateText("SelectedName", center.transform, 17f, FontStyles.Bold, Color.white);
+        selectedName.rectTransform.sizeDelta = new Vector2(154f, 72f);
+        selectedName.rectTransform.anchoredPosition = new Vector2(0f, 15f);
+        selectedName.enableWordWrapping = true;
+        selectedName.enableAutoSizing = true;
+        selectedName.fontSizeMin = 12f;
+        selectedName.fontSizeMax = 17f;
+        var cancelHint = CreateText("CancelHint", center.transform, 11f, FontStyles.Normal, new Color(0.66f, 0.69f, 0.64f, 1f));
+        cancelHint.text = "CENTER TO CANCEL";
+        cancelHint.rectTransform.sizeDelta = new Vector2(150f, 26f);
+        cancelHint.rectTransform.anchoredPosition = new Vector2(0f, -48f);
+
+        var pageHint = CreateText("PageHint", root.transform, 13f, FontStyles.Normal, new Color(0.76f, 0.78f, 0.73f, 1f));
+        pageHint.rectTransform.anchorMin = pageHint.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        pageHint.rectTransform.sizeDelta = new Vector2(420f, 30f);
+        pageHint.rectTransform.anchoredPosition = new Vector2(0f, -325f);
+        pageHint.gameObject.SetActive(false);
+
+        var controls = CreateText("Controls", root.transform, 12f, FontStyles.Normal, new Color(0.58f, 0.61f, 0.57f, 1f));
+        controls.text = "RELEASE TO USE   •   ESC / RIGHT CLICK TO CANCEL";
+        controls.rectTransform.anchorMin = controls.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        controls.rectTransform.sizeDelta = new Vector2(520f, 28f);
+        controls.rectTransform.anchoredPosition = new Vector2(0f, -358f);
+
+        root.SetActive(false);
+        PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
+        UnityEngine.Object.DestroyImmediate(root);
+        AssetDatabase.SaveAssets();
+    }
+
+    private static void CreateItemUseDelayTimerPrefab(Sprite circle)
+    {
+        var root = new GameObject("ItemUseDelayTimer", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(CanvasGroup));
+        Stretch(root.GetComponent<RectTransform>());
+        var canvas = root.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 30000;
+        var scaler = root.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
+        var canvasGroup = root.GetComponent<CanvasGroup>();
+        canvasGroup.alpha = 0f;
+        canvasGroup.blocksRaycasts = false;
+        canvasGroup.interactable = false;
+
+        var timerRoot = CreateRect("TimerRoot", root.transform, new Vector2(470f, 118f));
+        timerRoot.anchorMin = timerRoot.anchorMax = new Vector2(0.5f, 0f);
+        timerRoot.pivot = new Vector2(0.5f, 0f);
+        timerRoot.anchoredPosition = new Vector2(0f, 110f);
+
+        var shadow = CreateImage("Shadow", timerRoot, null, new Color(0f, 0f, 0f, 0.48f));
+        shadow.rectTransform.sizeDelta = new Vector2(470f, 118f);
+        shadow.rectTransform.anchoredPosition = new Vector2(3f, -3f);
+
+        var border = CreateImage("Border", timerRoot, null, new Color(0.58f, 0.43f, 0.22f, 0.78f));
+        border.rectTransform.sizeDelta = new Vector2(470f, 118f);
+        var panel = CreateImage("Panel", timerRoot, null, new Color(0.018f, 0.025f, 0.024f, 0.94f));
+        panel.rectTransform.sizeDelta = new Vector2(466f, 114f);
+
+        var accent = CreateImage("Accent", timerRoot, null, new Color(0.72f, 0.54f, 0.27f, 1f));
+        accent.rectTransform.sizeDelta = new Vector2(4f, 114f);
+        accent.rectTransform.anchoredPosition = new Vector2(-231f, 0f);
+
+        var iconBorder = CreateImage("IconFrame", timerRoot, circle, new Color(0.58f, 0.43f, 0.22f, 0.82f));
+        iconBorder.rectTransform.sizeDelta = new Vector2(84f, 84f);
+        iconBorder.rectTransform.anchoredPosition = new Vector2(-178f, 0f);
+        var iconBack = CreateImage("Background", iconBorder.transform, circle, new Color(0.035f, 0.045f, 0.043f, 1f));
+        iconBack.rectTransform.sizeDelta = new Vector2(78f, 78f);
+        var icon = CreateImage("Icon", iconBorder.transform, null, Color.white);
+        icon.rectTransform.sizeDelta = new Vector2(66f, 66f);
+        icon.preserveAspect = true;
+
+        var eyebrow = CreateText("Eyebrow", timerRoot, 11f, FontStyles.Normal, new Color(0.68f, 0.7f, 0.66f, 1f));
+        eyebrow.text = "ACCESSING ITEM";
+        eyebrow.alignment = TextAlignmentOptions.Left;
+        eyebrow.characterSpacing = 2f;
+        eyebrow.rectTransform.sizeDelta = new Vector2(260f, 20f);
+        eyebrow.rectTransform.anchoredPosition = new Vector2(23f, 37f);
+
+        var itemName = CreateText("ItemName", timerRoot, 20f, FontStyles.Bold, Color.white);
+        itemName.text = "ITEM NAME";
+        itemName.alignment = TextAlignmentOptions.Left;
+        itemName.rectTransform.sizeDelta = new Vector2(270f, 32f);
+        itemName.rectTransform.anchoredPosition = new Vector2(28f, 11f);
+        itemName.enableAutoSizing = true;
+        itemName.fontSizeMin = 14f;
+        itemName.fontSizeMax = 20f;
+
+        var remaining = CreateText("RemainingTime", timerRoot, 18f, FontStyles.Bold, new Color(0.9f, 0.76f, 0.48f, 1f));
+        remaining.text = "0.0s";
+        remaining.alignment = TextAlignmentOptions.Right;
+        remaining.rectTransform.sizeDelta = new Vector2(72f, 30f);
+        remaining.rectTransform.anchoredPosition = new Vector2(189f, 11f);
+
+        var progressTrack = CreateImage("ProgressTrack", timerRoot, null, new Color(0.1f, 0.12f, 0.11f, 1f));
+        progressTrack.rectTransform.sizeDelta = new Vector2(326f, 7f);
+        progressTrack.rectTransform.anchoredPosition = new Vector2(52f, -34f);
+        var progressFill = CreateImage("ProgressFill", progressTrack.transform, null, new Color(0.72f, 0.54f, 0.27f, 1f));
+        Stretch(progressFill.rectTransform);
+        progressFill.type = Image.Type.Simple;
+
+        root.SetActive(false);
+        PrefabUtility.SaveAsPrefabAsset(root, TimerPrefabPath);
+        UnityEngine.Object.DestroyImmediate(root);
+        AssetDatabase.SaveAssets();
+    }
+
+    private static RectTransform CreateRect(string name, Transform parent, Vector2 size)
+    {
+        var gameObject = new GameObject(name, typeof(RectTransform));
+        var rect = gameObject.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.sizeDelta = size;
+        return rect;
+    }
+
+    private static Image CreateImage(string name, Transform parent, Sprite sprite, Color color)
+    {
+        var rect = CreateRect(name, parent, Vector2.zero);
+        var image = rect.gameObject.AddComponent<Image>();
+        image.sprite = sprite;
+        image.color = color;
+        image.raycastTarget = false;
+        return image;
+    }
+
+    private static TextMeshProUGUI CreateText(string name, Transform parent, float size, FontStyles style, Color color)
+    {
+        var rect = CreateRect(name, parent, Vector2.zero);
+        var text = rect.gameObject.AddComponent<TextMeshProUGUI>();
+        text.fontSize = size;
+        text.fontStyle = style;
+        text.color = color;
+        text.alignment = TextAlignmentOptions.Center;
+        text.enableWordWrapping = false;
+        text.overflowMode = TextOverflowModes.Ellipsis;
+        text.raycastTarget = false;
+        return text;
+    }
+
+    private static void Stretch(RectTransform rect)
+    {
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = rect.offsetMax = Vector2.zero;
+    }
+
+    private static string GetArgument(string name)
+    {
+        var args = Environment.GetCommandLineArgs();
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+            {
+                return args[i + 1];
+            }
+        }
+        return null;
+    }
+}
+
+

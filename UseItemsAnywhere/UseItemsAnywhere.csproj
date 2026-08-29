@@ -115,6 +115,7 @@
 
   <ItemGroup>
     <BundleFile Include="$(ProjectDir)Resources\quickusewheel" />
+    <BundleFile Include="$(ProjectDir)Resources\itemusedelaytimer" />
   </ItemGroup>
 
   <!-- Gets the commit hash from git -->

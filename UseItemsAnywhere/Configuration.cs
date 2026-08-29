@@ -15,7 +15,9 @@ public static class Configuration
         [EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster];
     private static ConfigEntry<List<EquipmentSlot>> _weaponSlots = null!; 
     public static HashSet<EquipmentSlot> AllAllowedWeaponSlots => [..DefaultWeaponSlots, .._weaponSlots.Value];
-    public static ConfigEntry<List<EquipmentSlot>> GrenadeThrowSlots = null!; 
+    public static ConfigEntry<List<EquipmentSlot>> GrenadeThrowSlots = null!;
+    public static ConfigEntry<List<EquipmentSlot>> _meleeSlots = null!;
+    public static HashSet<EquipmentSlot> AllAllowedMeleeSlots => [EquipmentSlot.Scabbard, .._meleeSlots.Value];
     public static ConfigEntry<List<EquipmentSlot>> FlareSlots = null!; 
     public static ConfigEntry<List<EquipmentSlot>> ReloadSlots = null!;
     public static ConfigEntry<List<EquipmentSlot>> MedsSlots = null!;
@@ -189,6 +191,22 @@ public static class Configuration
                     CustomDrawer = EquipmentSlotListDrawer,
                 })));
         
+        ConfigEntries.Add(_meleeSlots = configFile.Bind(
+            SlotConfigurations,
+            "Melee Slots",
+            new List<EquipmentSlot>
+            {
+                EquipmentSlot.TacticalVest,
+                EquipmentSlot.Pockets,
+            },
+            new ConfigDescription(
+                "Configures which slots can supply grenades.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes
+                {
+                    CustomDrawer = EquipmentSlotListDrawer,
+                })));
+        
         ConfigEntries.Add(FlareSlots = configFile.Bind(
             SlotConfigurations,
             "Flare Slots",
@@ -302,7 +320,7 @@ public static class Configuration
             "Show Timer Panel",
             true,
             new ConfigDescription(
-                "Configures whether or not to show the item delay panel.",
+                "Configures whether or not to show the themed item-use delay timer.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
