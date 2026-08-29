@@ -150,11 +150,15 @@ internal sealed class QuickUseWheel
         {
             _shortcutHeld = true;
             InputBlocked = true;
+#if DEBUG
             if (!_inputDetectionLogged)
             {
+
                 _logger?.LogInfo("Quick-use wheel input detected; attempting to open the Canvas.");
                 _inputDetectionLogged = true;
             }
+#endif
+           
             Open();
         }
 
@@ -216,29 +220,38 @@ internal sealed class QuickUseWheel
     {
         if (!_uiRoot)
         {
+#if DEBUG
             if (!_canvasWarningLogged)
             {
+
                 _logger?.LogWarning("Quick-use wheel cannot open because its Canvas is unavailable.");
                 _canvasWarningLogged = true;
             }
+#endif
             return;
         }
         
         if (!TryGetLocalPlayer(out var player, out var playerOwner))
         {
+#if DEBUG
             _logger?.LogWarning("Quick-use wheel input was detected, but no local raid player was available.");
+#endif
             return;
         }
         
         if (player.IsInventoryOpened || !player.HealthController.IsAlive)
         {
+#if DEBUG
             _logger?.LogDebug("Quick-use wheel was suppressed by the current player state.");
+#endif
             return;
         }
         
         if (ItemAccessDelayPatch.HasPendingItemAccess(player))
         {
+#if DEBUG
             _logger?.LogDebug("Quick-use wheel was suppressed while an item-access delay is pending.");
+#endif
             return;
         }
 
@@ -246,7 +259,9 @@ internal sealed class QuickUseWheel
         _playerOwner = playerOwner;
         _items.Clear();
         PopulateUsableItems(player);
+#if DEBUG
         _logger?.LogDebug($"Opening quick-use wheel with {_items.Count} usable item(s).");
+#endif
         _selectionVector = Vector2.zero;
         _selectedIndex = -1;
         _page = 0;
@@ -558,9 +573,7 @@ internal sealed class QuickUseWheel
                 continue;
             }
 
-            var sourceSlot = _sourceSlots.TryGetValue(item, out var slot)
-                ? slot
-                : EquipmentSlot.Pockets;
+            var sourceSlot = _sourceSlots.GetValueOrDefault(item, EquipmentSlot.Pockets);
             _items.Add(new WheelItem(
                 item,
                 GetDisplayName(item),
@@ -759,11 +772,13 @@ internal sealed class QuickUseWheel
 
         if (!_runtimeFont)
         {
+#if DEBUG
             if (!_fontWarningLogged)
             {
                 _logger?.LogWarning("Quick-use wheel text font is not available yet; it will be retried when the wheel opens.");
                 _fontWarningLogged = true;
             }
+#endif
             return false;
         }
 
@@ -781,7 +796,9 @@ internal sealed class QuickUseWheel
         {
             return;
         }
+#if DEBUG
         _logger?.LogWarning($"Quick-use wheel could not create its preferred font and will use an EFT font when available: {exception.Message}");
+#endif
         _fontWarningLogged = true;
     }
 

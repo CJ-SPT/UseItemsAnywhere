@@ -114,7 +114,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Utils\" />
     <BundleFile Include="$(ProjectDir)Resources\quickusewheel" />
   </ItemGroup>
 
