@@ -13,19 +13,32 @@ public static class Configuration
 {
     public static readonly HashSet<EquipmentSlot> DefaultWeaponSlots =
         [EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster];
+    private static ConfigEntry<List<EquipmentSlot>> _weaponSlots = null!; 
+    public static HashSet<EquipmentSlot> AllAllowedWeaponSlots => [..DefaultWeaponSlots, .._weaponSlots.Value];
+    public static ConfigEntry<List<EquipmentSlot>> GrenadeThrowSlots = null!;
+    public static ConfigEntry<List<EquipmentSlot>> _meleeSlots = null!;
+    public static HashSet<EquipmentSlot> AllAllowedMeleeSlots => [EquipmentSlot.Scabbard, .._meleeSlots.Value];
+    public static ConfigEntry<List<EquipmentSlot>> FlareSlots = null!; 
+    public static ConfigEntry<List<EquipmentSlot>> ReloadSlots = null!;
+    public static ConfigEntry<List<EquipmentSlot>> MedsSlots = null!;
+    public static ConfigEntry<List<EquipmentSlot>> FoodDrinkSlots = null!;
+    public static ConfigEntry<List<EquipmentSlot>> AllOtherItems = null!; 
     
-    public static ConfigEntry<List<EquipmentSlot>> WeaponSlots; 
-    public static ConfigEntry<List<EquipmentSlot>> GrenadeThrowSlots; 
-    public static ConfigEntry<List<EquipmentSlot>> FlareSlots; 
-    public static ConfigEntry<List<EquipmentSlot>> ReloadSlots;
-    public static ConfigEntry<List<EquipmentSlot>> MedsSlots;
-    public static ConfigEntry<List<EquipmentSlot>> AllOtherItems; 
+    public static ConfigEntry<bool> EnableSlotDelays = null!; 
+    public static ConfigEntry<bool> ShowTimerPanel = null!; 
+    public static ConfigEntry<KeyboardShortcut> ClearItemAccessDelay = null!;
+    private static ConfigEntry<float> _additionalContainerNestingDelay = null!;
     
-    public static ConfigEntry<bool> EnableSlotDelays; 
-    public static ConfigEntry<bool> ShowTimerPanel; 
-    public static ConfigEntry<KeyboardShortcut> ClearItemAccessDelay;
-    public static ConfigEntry<float> AdditionalContainerNestingDelay;
-
+    public static ConfigEntry<bool> EnableQuickUseWheel = null!;
+    public static ConfigEntry<KeyboardShortcut> QuickUseWheelKey = null!;
+    public static ConfigEntry<int> QuickUseItemsPerPage = null!;
+    public static ConfigEntry<bool> QuickUseShowSourceSlot = null!;
+    public static ConfigEntry<bool> QuickUseShowPrimAndSecWeapons = null!;
+    public static ConfigEntry<bool> QuickUseShowMelee = null!;
+    public static ConfigEntry<bool> QuickUseShowMeds = null!;
+    public static ConfigEntry<bool> QuickUseShowFoodDrink = null!;
+    public static ConfigEntry<bool> QuickUseShowFlares = null!;
+    
     public static readonly HashSet<MongoID> FlareIds =
     [
         new("62178c4d4ecf221597654e3d"), // Red Flare
@@ -39,6 +52,7 @@ public static class Configuration
 
     private const string SlotConfigurations = "Slot Configurations";
     private const string SlotAccessDelays = "Slot Access Delays";
+    private const string QuickUseWheel = "Quick Use Wheel";
     private const float SlotToggleWidth = 135f;
     
     private static readonly (EquipmentSlot Slot, string DisplayName)[] ConfigurableSlots =
@@ -56,13 +70,98 @@ public static class Configuration
 
         InitSlotUsage(configFile);
         InitSlotAccessDelay(configFile);
+        InitQuickUseWheel(configFile);
         
         RecalcOrder();
     }
 
+    private static void InitQuickUseWheel(ConfigFile configFile)
+    {
+        ConfigEntries.Add(EnableQuickUseWheel = configFile.Bind(
+            QuickUseWheel,
+            "Enable Quick Use Wheel",
+            true,
+            new ConfigDescription(
+                "Configures whether or not the quick-use item wheel is enabled.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseWheelKey = configFile.Bind(
+            QuickUseWheel,
+            "Quick Use Wheel Key",
+            new KeyboardShortcut(KeyCode.H),
+            new ConfigDescription(
+                "Key held to open and select from the quick-use item wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseItemsPerPage = configFile.Bind(
+            QuickUseWheel,
+            "Items Per Page",
+            8,
+            new ConfigDescription(
+                "Maximum number of items displayed on each wheel page.",
+                new AcceptableValueRange<int>(4, 12),
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseShowSourceSlot = configFile.Bind(
+            QuickUseWheel,
+            "Show Source Slot",
+            true,
+            new ConfigDescription(
+                "Configures whether or not each item displays its source equipment slot.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+        
+        ConfigEntries.Add(QuickUseShowPrimAndSecWeapons = configFile.Bind(
+            QuickUseWheel,
+            "Show Guns",
+            true,
+            new ConfigDescription(
+                "Configures whether or not to show guns in the quick wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+        
+        ConfigEntries.Add(QuickUseShowMelee = configFile.Bind(
+            QuickUseWheel,
+            "Show Melee",
+            true,
+            new ConfigDescription(
+                "Configures whether or not to show melee weapon in the quick wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+        
+        ConfigEntries.Add(QuickUseShowMeds = configFile.Bind(
+            QuickUseWheel,
+            "Show Meds",
+            true,
+            new ConfigDescription(
+                "Configures whether or not to show meds in the quick wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+        
+        ConfigEntries.Add(QuickUseShowFoodDrink = configFile.Bind(
+            QuickUseWheel,
+            "Show Food/Drink",
+            true,
+            new ConfigDescription(
+                "Configures whether or not to show food and drink in the quick wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+        
+        ConfigEntries.Add(QuickUseShowFlares = configFile.Bind(
+            QuickUseWheel,
+            "Show Flares",
+            true,
+            new ConfigDescription(
+                "Configures whether or not to show flares in the quick wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+    }
+
     private static void InitSlotUsage(ConfigFile configFile)
     {
-         ConfigEntries.Add(WeaponSlots = configFile.Bind(
+         ConfigEntries.Add(_weaponSlots = configFile.Bind(
             SlotConfigurations,
             "Weapon Slots",
             new List<EquipmentSlot>
@@ -79,6 +178,22 @@ public static class Configuration
         ConfigEntries.Add(GrenadeThrowSlots = configFile.Bind(
             SlotConfigurations,
             "Grenade Throwing Slots",
+            new List<EquipmentSlot>
+            {
+                EquipmentSlot.TacticalVest,
+                EquipmentSlot.Pockets,
+            },
+            new ConfigDescription(
+                "Configures which slots can supply grenades.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes
+                {
+                    CustomDrawer = EquipmentSlotListDrawer,
+                })));
+        
+        ConfigEntries.Add(_meleeSlots = configFile.Bind(
+            SlotConfigurations,
+            "Melee Slots",
             new List<EquipmentSlot>
             {
                 EquipmentSlot.TacticalVest,
@@ -156,6 +271,22 @@ public static class Configuration
                     CustomDrawer = EquipmentSlotListDrawer,
                 })));
         
+        ConfigEntries.Add(FoodDrinkSlots = configFile.Bind(
+            SlotConfigurations,
+            "Food/Drink Slots",
+            new List<EquipmentSlot>
+            {
+                EquipmentSlot.TacticalVest,
+                EquipmentSlot.Pockets,
+            },
+            new ConfigDescription(
+                "Configures which slots can bind Food/Drinks.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes
+                {
+                    CustomDrawer = EquipmentSlotListDrawer,
+                })));
+        
         ConfigEntries.Add(AllOtherItems = configFile.Bind(
             SlotConfigurations,
             "All Other Items",
@@ -189,7 +320,7 @@ public static class Configuration
             "Show Timer Panel",
             true,
             new ConfigDescription(
-                "Configures whether or not to show the item delay panel.",
+                "Configures whether or not to show the themed item-use delay timer.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
@@ -202,7 +333,7 @@ public static class Configuration
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
-        ConfigEntries.Add(AdditionalContainerNestingDelay = configFile.Bind(
+        ConfigEntries.Add(_additionalContainerNestingDelay = configFile.Bind(
             SlotAccessDelays,
             "Additional Backpack Nesting Delay",
             0.5f,
@@ -251,7 +382,7 @@ public static class Configuration
         {
             if (ReferenceEquals(parentItem, equippedBackpack))
             {
-                return nestingDepth * AdditionalContainerNestingDelay.Value;
+                return nestingDepth * _additionalContainerNestingDelay.Value;
             }
 
             nestingDepth++;

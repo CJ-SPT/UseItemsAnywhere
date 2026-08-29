@@ -26,6 +26,8 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         }
     }
 
+    internal static bool HasPendingItemAccess(Player player) => PendingPlayers.ContainsKey(player);
+
     protected override MethodBase GetTargetMethod()
     {
         return AccessTools.Method(
@@ -106,18 +108,18 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         float delay,
         PendingAccess pendingAccess)
     {
-        var playerOwner = ((LocalGame)Singleton<IBotGame>.Instance).PlayerOwner;
-
+        ItemUseDelayTimer.Presentation? presentation = null;
         try
         {
-            if (Configuration.ShowTimerPanel.Value&& playerOwner)
+            if (Configuration.ShowTimerPanel.Value)
             {
-                playerOwner.ShowObjectivesPanel(GetTimerText(item), delay);
+                presentation = Plugin.DelayTimer?.Begin(player, item, delay);
             }
 
             var delayEndTime = Time.time + delay;
             while (Time.time < delayEndTime && !pendingAccess.IsCancelled)
             {
+                presentation?.SetRemaining(delayEndTime - Time.time);
                 yield return null;
             }
 
@@ -131,10 +133,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         }
         finally
         {
-            if (Configuration.ShowTimerPanel.Value&& playerOwner)
-            {
-                playerOwner.CloseObjectivesPanel();
-            }
+            presentation?.Dispose();
 
             PendingPlayers.Remove(player);
             BypassPlayers.Remove(player);
@@ -144,22 +143,5 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
     private sealed class PendingAccess
     {
         internal bool IsCancelled;
-    }
-    
-    private static string GetTimerText(Item item)
-    {
-        var itemName = item.LocalizedName();
-        if (string.IsNullOrWhiteSpace(itemName))
-        {
-            itemName = item.ShortName;
-        }
-
-        // BattleUIPanelExtraction formats this text with the remaining time.
-        // Escape any braces in a localized item name so they are not parsed as placeholders.
-        itemName = itemName
-            .Replace("{", "{{")
-            .Replace("}", "}}");
-
-        return $"Using {itemName} {{0:F1}}";
     }
 }
