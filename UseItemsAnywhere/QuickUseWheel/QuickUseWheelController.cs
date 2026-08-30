@@ -16,7 +16,6 @@ internal sealed class QuickUseWheelController
     private const float WheelRefreshInterval = 0.15f;
     private const float MouseSelectionSpeed = 24f;
     private const float MaximumSelectionRadius = 280f;
-    private const float MaximumVisibleSegmentDegrees = 42f;
 
     private static readonly Callback<IHandsController> IgnoreHandsResult = _ => { };
     private static Player? _pendingOpenRequest;
@@ -537,12 +536,9 @@ internal sealed class QuickUseWheelController
         {
             degrees += 360f;
         }
-        var slice = 360f / _pageItemCount;
+        var slice = QuickUseWheelGeometry.GetSliceDegrees(_pageItemCount);
         var candidateIndex = Mathf.FloorToInt((degrees + slice * 0.5f) / slice) % _pageItemCount;
-        var visibleSegmentDegrees = Mathf.Min(slice - Mathf.Min(2f, slice * 0.08f), MaximumVisibleSegmentDegrees);
-        var degreesFromCandidateCenter = Mathf.Abs(Mathf.DeltaAngle(degrees, candidateIndex * slice));
-        _selectedIndex = degreesFromCandidateCenter <= visibleSegmentDegrees * 0.5f
-            && !GetPageItem(candidateIndex).IsQueued
+        _selectedIndex = !GetPageItem(candidateIndex).IsQueued
             ? candidateIndex
             : -1;
     }

@@ -9,7 +9,6 @@ namespace UseItemsAnywhere.QuickUseWheel;
 internal sealed class QuickUseWheelView
 {
     private const string PrefabPath = "assets/mods/useitemsanywhere.assets/ui/quickusewheel.prefab";
-    private const float MaximumVisibleSegmentDegrees = 42f;
 
     private static readonly Color NormalSegmentColor = new(0.045f, 0.048f, 0.048f, 0.86f);
     private static readonly Color SelectedSegmentColor = new(0.22f, 0.25f, 0.26f, 0.96f);
@@ -81,13 +80,12 @@ internal sealed class QuickUseWheelView
             return;
         }
 
-        var slice = 360f / pageItemCount;
-        var gap = Mathf.Min(2f, slice * 0.08f);
-        var visibleSegmentDegrees = Mathf.Min(slice - gap, MaximumVisibleSegmentDegrees);
+        var slice = QuickUseWheelGeometry.GetSliceDegrees(pageItemCount);
+        var visibleSegmentDegrees = QuickUseWheelGeometry.GetVisibleSegmentDegrees(pageItemCount);
         const float labelRadius = 188f;
         var labelWidth = pageItemCount == 1
             ? 132f
-            : Mathf.Clamp(2f * labelRadius * Mathf.Sin((slice - gap) * Mathf.Deg2Rad * 0.5f) * 0.76f, 66f, 132f);
+            : Mathf.Clamp(2f * labelRadius * Mathf.Sin(visibleSegmentDegrees * Mathf.Deg2Rad * 0.5f) * 0.76f, 66f, 132f);
 
         for (var index = 0; index < pageItemCount; index++)
         {
