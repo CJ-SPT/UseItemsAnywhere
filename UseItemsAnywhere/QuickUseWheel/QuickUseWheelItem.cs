@@ -12,6 +12,7 @@ internal readonly struct QuickUseWheelItem(
     bool isQueued,
     bool isFavorite,
     EquipmentSlot sourceSlot,
+    string sourceName,
     ItemIcon? icon)
 {
     internal Item Item { get; } = item;
@@ -23,7 +24,7 @@ internal readonly struct QuickUseWheelItem(
     internal bool IsFavorite { get; } = isFavorite;
     internal EquipmentSlot SourceSlot { get; } = sourceSlot;
     internal ItemIcon? Icon { get; } = icon;
-    internal string SourceName { get; } = GetSlotName(sourceSlot);
+    internal string SourceName { get; } = sourceName;
 
     internal QuickUseWheelItem WithFavorite(bool value) => new(
         Item,
@@ -34,15 +35,6 @@ internal readonly struct QuickUseWheelItem(
         IsQueued,
         value,
         SourceSlot,
+        SourceName,
         Icon);
-
-    private static string GetSlotName(EquipmentSlot slot) => slot switch
-    {
-        EquipmentSlot.Pockets => "POCKETS",
-        EquipmentSlot.TacticalVest => "TACTICAL VEST",
-        EquipmentSlot.ArmBand => "ARM BAND",
-        EquipmentSlot.Backpack => "BACKPACK",
-        EquipmentSlot.SecuredContainer => "SECURE CONTAINER",
-        _ => slot.ToString(),
-    };
 }

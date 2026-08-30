@@ -56,14 +56,13 @@ internal sealed class QuickUseWheelController
     }
 
     internal void Initialize(
-        string pluginDirectory,
         ManualLogSource logger,
-        Transform persistentParent,
-        RuntimeUiFont font)
+        RuntimeUiService ui)
     {
         _logger = logger;
         _inventory.LoadFavorites();
-        _view.Initialize(pluginDirectory, logger, persistentParent, font);
+        _inventory.Initialize(ui);
+        _view.Initialize(ui);
     }
 
     internal void Update()

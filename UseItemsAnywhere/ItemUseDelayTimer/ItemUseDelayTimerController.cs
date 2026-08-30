@@ -1,8 +1,6 @@
-using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
 using EFT.InventoryLogic;
-using UnityEngine;
 using UseItemsAnywhere.UI;
 
 namespace UseItemsAnywhere.ItemUseDelayTimer;
@@ -10,17 +8,15 @@ namespace UseItemsAnywhere.ItemUseDelayTimer;
 internal sealed class ItemUseDelayTimerController
 {
     private readonly ItemUseDelayTimerView _view = new();
+    private RuntimeUiService _ui = null!;
     private Player? _player;
     private int _nextPresentationId;
     private int _activePresentationId;
 
-    internal void Initialize(
-        string pluginDirectory,
-        ManualLogSource logger,
-        Transform persistentParent,
-        RuntimeUiFont font)
+    internal void Initialize(RuntimeUiService ui)
     {
-        _view.Initialize(pluginDirectory, logger, persistentParent, font);
+        _ui = ui;
+        _view.Initialize(ui);
     }
 
     internal ItemUseDelayPresentation? Begin(
@@ -37,6 +33,7 @@ internal sealed class ItemUseDelayTimerController
         var presentationId = ++_nextPresentationId;
         _activePresentationId = presentationId;
         _player = player;
+        _ui.SetItemCachePlayer(player);
         _view.Show(item, delayInfo);
         return new ItemUseDelayPresentation(this, presentationId);
     }

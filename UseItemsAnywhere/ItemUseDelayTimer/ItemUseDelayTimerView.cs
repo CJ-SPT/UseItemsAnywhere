@@ -1,11 +1,9 @@
 using System;
-using System.IO;
 using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
 using EFT.InventoryLogic;
 using EFT.UI;
-using EFT.UI.DragAndDrop;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -19,10 +17,9 @@ internal sealed class ItemUseDelayTimerView
     private const float ExitHoldDuration = 0.08f;
     private const float ExitFadeDuration = 0.18f;
 
-    private AssetBundle? _bundle;
-    private GameObject? _uiRoot;
-    private CanvasGroup? _canvasGroup;
-    private RectTransform? _timerRoot;
+    private RuntimeUiDocument? _document;
+    private RuntimeUiTransition? _transition;
+    private RuntimeUiService? _ui;
     private Image? _icon;
     private Image? _progressFill;
     private TMP_Text? _itemName;
@@ -31,106 +28,61 @@ internal sealed class ItemUseDelayTimerView
     private TMP_Text? _detailText;
     private TMP_Text? _cancelHint;
     private ItemIcon? _itemIcon;
-    private RuntimeUiFont? _font;
     private ManualLogSource? _logger;
     private float _duration;
     private bool _visible;
-    private bool _exiting;
-    private float _exitStartTime;
-    private float _exitStartAlpha;
-    private Vector3 _exitStartScale;
 
-    internal bool IsAvailable => _uiRoot;
+    internal bool IsAvailable => _document?.IsAvailable == true;
 
     internal bool IsVisible => _visible;
 
-    internal void Initialize(
-        string pluginDirectory,
-        ManualLogSource logger,
-        Transform persistentParent,
-        RuntimeUiFont font)
+    internal void Initialize(RuntimeUiService ui)
     {
-        _logger = logger;
-        var bundlePath = Path.Combine(pluginDirectory, "itemusedelaytimer");
-        if (!File.Exists(bundlePath))
-        {
-            logger.LogError($"Item-use delay timer bundle was not found: {bundlePath}");
-            return;
-        }
-
-        _bundle = AssetBundle.LoadFromFile(bundlePath);
-        if (!_bundle)
-        {
-            logger.LogError($"Item-use delay timer bundle could not be loaded: {bundlePath}");
-            return;
-        }
-
-        var prefab = _bundle.LoadAsset<GameObject>(PrefabPath);
-        if (!prefab)
-        {
-            logger.LogError($"Item-use delay timer prefab was not found in {bundlePath}");
-            _bundle.Unload(false);
-            _bundle = null;
-            return;
-        }
-
-        _uiRoot = UnityEngine.Object.Instantiate(prefab, persistentParent, false);
-        _uiRoot.name = "UseItemsAnywhere_ItemUseDelayTimer";
-        _uiRoot.SetActive(false);
-
-        try
-        {
-            BindPrefab();
-        }
-        catch (Exception exception)
-        {
-            logger.LogError($"Item-use delay timer prefab binding failed:\n{exception}");
-            UnityEngine.Object.Destroy(_uiRoot);
-            _uiRoot = null;
-            _bundle.Unload(false);
-            _bundle = null;
-            return;
-        }
-
-        _font = font;
-        _font.TryAssign(_uiRoot);
+        _ui = ui;
+        _logger = ui.Logger;
+        _document = ui.CreateDocument(
+            "Item-use delay timer",
+            "itemusedelaytimer",
+            PrefabPath,
+            "UseItemsAnywhere_ItemUseDelayTimer",
+            BindPrefab);
     }
 
     internal void Show(Item item, Configuration.ItemAccessDelayInfo delayInfo)
     {
-        var root = _uiRoot;
-        if (!root)
+        if (_document?.IsAvailable != true || _ui is null)
         {
             return;
         }
 
-        _font?.TryAssign(root!);
         _duration = Mathf.Max(delayInfo.TotalDelay, 0.01f);
-        _itemName!.text = GetItemName(item);
+        _itemName!.text = _ui.GetItemName(item);
         _remainingTime!.text = $"{delayInfo.TotalDelay:0.0}s";
-        _statusText!.text = $"ACCESSING ITEM  •  {GetSlotName(delayInfo.SourceSlot)}";
+        _statusText!.text = $"ACCESSING ITEM  •  {RuntimeUiService.GetSlotName(delayInfo.SourceSlot)}";
         _detailText!.text = GetDelayDetail(delayInfo);
         SetCancelHint();
         _progressFill!.rectTransform.anchorMax = Vector2.one;
-        _itemIcon = LoadItemIcon(item);
+        _itemIcon = _ui.GetItemIcon(item);
         _icon!.sprite = _itemIcon?.Sprite;
         _icon.enabled = _icon.sprite;
-        _canvasGroup!.alpha = 0f;
-        _timerRoot!.localScale = Vector3.one * 0.94f;
-        root!.SetActive(true);
+        _document.Show();
+        _transition!.BeginEntrance(0.94f);
         _visible = true;
     }
 
     internal void Update()
     {
-        if (!_visible || !_uiRoot)
+        if (!_visible || _document?.IsAvailable != true)
         {
             return;
         }
 
-        if (_exiting)
+        if (_transition!.IsExiting)
         {
-            UpdateExitAnimation();
+            if (_transition.UpdateExit())
+            {
+                HideImmediately();
+            }
             return;
         }
 
@@ -140,8 +92,7 @@ internal sealed class ItemUseDelayTimerView
             return;
         }
 
-        _canvasGroup!.alpha = Mathf.MoveTowards(_canvasGroup.alpha, 1f, Time.unscaledDeltaTime * 12f);
-        _timerRoot!.localScale = Vector3.Lerp(_timerRoot.localScale, Vector3.one, Time.unscaledDeltaTime * 18f);
+        _transition.UpdateEntrance();
 
         var loadedSprite = _itemIcon?.Sprite;
         if (!_icon!.sprite && loadedSprite)
@@ -168,69 +119,44 @@ internal sealed class ItemUseDelayTimerView
             _progressFill!.rectTransform.anchorMax = new Vector2(0f, 1f);
         }
         PlayResultSound(completed);
-        _exiting = true;
-        _exitStartTime = Time.unscaledTime;
-        _exitStartAlpha = _canvasGroup!.alpha;
-        _exitStartScale = _timerRoot!.localScale;
+        _transition!.BeginExit(ExitHoldDuration, ExitFadeDuration, 0.96f);
     }
 
     internal void HideImmediately()
     {
         _visible = false;
-        _exiting = false;
+        _transition?.Reset();
         _itemIcon = null;
         if (_icon)
         {
             _icon!.sprite = null;
             _icon.enabled = false;
         }
-        if (_uiRoot)
-        {
-            _uiRoot!.SetActive(false);
-        }
+        _document?.Hide();
     }
 
     internal void Destroy()
     {
         HideImmediately();
-        if (_uiRoot)
-        {
-            UnityEngine.Object.Destroy(_uiRoot);
-            _uiRoot = null;
-        }
-        _bundle?.Unload(false);
-        _bundle = null;
-        _font = null;
+        _document?.Destroy();
+        _document = null;
+        _transition = null;
+        _ui = null;
+        _logger = null;
     }
 
-    private void UpdateExitAnimation()
+    private void BindPrefab(RuntimeUiDocument document)
     {
-        var elapsed = Time.unscaledTime - _exitStartTime;
-        if (elapsed <= ExitHoldDuration)
-        {
-            return;
-        }
-
-        var progress = Mathf.Clamp01((elapsed - ExitHoldDuration) / ExitFadeDuration);
-        _canvasGroup!.alpha = Mathf.Lerp(_exitStartAlpha, 0f, progress);
-        _timerRoot!.localScale = Vector3.Lerp(_exitStartScale, Vector3.one * 0.96f, progress);
-        if (progress >= 1f)
-        {
-            HideImmediately();
-        }
-    }
-
-    private void BindPrefab()
-    {
-        _canvasGroup = RequireComponent<CanvasGroup>(_uiRoot!.transform, string.Empty);
-        _timerRoot = RequireComponent<RectTransform>(_uiRoot.transform, "TimerRoot");
-        _icon = RequireComponent<Image>(_uiRoot.transform, "TimerRoot/IconFrame/Icon");
-        _progressFill = RequireComponent<Image>(_uiRoot.transform, "TimerRoot/ProgressTrack/ProgressFill");
-        _itemName = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/ItemName");
-        _remainingTime = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/RemainingTime");
-        _statusText = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/Eyebrow");
-        _detailText = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/Detail");
-        _cancelHint = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/CancelHint");
+        var canvasGroup = document.Require<CanvasGroup>(string.Empty);
+        var timerRoot = document.Require<RectTransform>("TimerRoot");
+        _transition = new RuntimeUiTransition(canvasGroup, timerRoot);
+        _icon = document.Require<Image>("TimerRoot/IconFrame/Icon");
+        _progressFill = document.Require<Image>("TimerRoot/ProgressTrack/ProgressFill");
+        _itemName = document.Require<TMP_Text>("TimerRoot/ItemName");
+        _remainingTime = document.Require<TMP_Text>("TimerRoot/RemainingTime");
+        _statusText = document.Require<TMP_Text>("TimerRoot/Eyebrow");
+        _detailText = document.Require<TMP_Text>("TimerRoot/Detail");
+        _cancelHint = document.Require<TMP_Text>("TimerRoot/CancelHint");
     }
 
     private void SetCancelHint()
@@ -264,36 +190,6 @@ internal sealed class ItemUseDelayTimerView
         }
     }
 
-    private static string GetItemName(Item item)
-    {
-        var name = item.LocalizedName();
-        if (!string.IsNullOrWhiteSpace(name)
-            && !string.Equals(name, item.Template.NameLocalizationKey, StringComparison.Ordinal))
-        {
-            return name;
-        }
-
-        name = item.LocalizedShortName();
-        if (!string.IsNullOrWhiteSpace(name) && !string.Equals(name, item.ShortName, StringComparison.Ordinal))
-        {
-            return name;
-        }
-
-        return string.IsNullOrWhiteSpace(item.ShortName) ? item.TemplateId.ToString() : item.ShortName;
-    }
-
-    private static ItemIcon? LoadItemIcon(Item item)
-    {
-        try
-        {
-            return ItemViewFactory.LoadItemIcon(item, 1, false);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
     private static string GetDelayDetail(Configuration.ItemAccessDelayInfo delayInfo)
     {
         if (delayInfo.NestingDelay <= 0f)
@@ -305,23 +201,4 @@ internal sealed class ItemUseDelayTimerView
         return $"BASE {delayInfo.BaseDelay:0.0}s  +  {delayInfo.NestingDelay:0.0}s NESTED  •  {delayInfo.NestingDepth} {layerLabel}";
     }
 
-    private static string GetSlotName(EquipmentSlot slot) => slot switch
-    {
-        EquipmentSlot.Pockets => "POCKETS",
-        EquipmentSlot.TacticalVest => "TACTICAL VEST",
-        EquipmentSlot.ArmBand => "ARM BAND",
-        EquipmentSlot.Backpack => "BACKPACK",
-        EquipmentSlot.SecuredContainer => "SECURE CONTAINER",
-        _ => slot.ToString().ToUpperInvariant(),
-    };
-
-    private static T RequireComponent<T>(Transform root, string path) where T : Component
-    {
-        var target = string.IsNullOrEmpty(path) ? root : root.Find(path);
-        if (!target || !target.TryGetComponent<T>(out var component))
-        {
-            throw new InvalidOperationException($"Missing {typeof(T).Name} at '{path}'.");
-        }
-        return component;
-    }
 }

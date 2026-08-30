@@ -1,7 +1,4 @@
-using System;
 using System.Collections.Generic;
-using System.IO;
-using BepInEx.Logging;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -23,10 +20,8 @@ internal sealed class QuickUseWheelView
     private static readonly Color QueuedNameColor = new(0.73f, 0.66f, 0.43f, 1f);
 
     private readonly List<SegmentView> _views = [];
-    private AssetBundle? _bundle;
-    private GameObject? _uiRoot;
-    private CanvasGroup? _canvasGroup;
-    private RectTransform? _wheelRoot;
+    private RuntimeUiDocument? _document;
+    private RuntimeUiTransition? _transition;
     private Image? _segmentTemplate;
     private RectTransform? _itemTemplate;
     private Image? _centerBorder;
@@ -34,79 +29,34 @@ internal sealed class QuickUseWheelView
     private TMP_Text? _cancelHint;
     private TMP_Text? _pageHint;
     private TMP_Text? _controls;
-    private RuntimeUiFont? _font;
     private int _presentedSelectedIndex = int.MinValue;
 
-    internal bool IsAvailable => _uiRoot;
+    internal bool IsAvailable => _document?.IsAvailable == true;
 
-    internal void Initialize(
-        string pluginDirectory,
-        ManualLogSource logger,
-        Transform persistentParent,
-        RuntimeUiFont font)
+    internal void Initialize(RuntimeUiService ui)
     {
-        var bundlePath = Path.Combine(pluginDirectory, "quickusewheel");
-        if (!File.Exists(bundlePath))
-        {
-            logger.LogError($"Quick-use wheel bundle was not found: {bundlePath}");
-            return;
-        }
-
-        _bundle = AssetBundle.LoadFromFile(bundlePath);
-        if (!_bundle)
-        {
-            logger.LogError($"Quick-use wheel bundle could not be loaded: {bundlePath}");
-            return;
-        }
-
-        var prefab = _bundle.LoadAsset<GameObject>(PrefabPath);
-        if (!prefab)
-        {
-            logger.LogError($"Quick-use wheel prefab was not found in {bundlePath}");
-            _bundle.Unload(false);
-            _bundle = null;
-            return;
-        }
-
-        _uiRoot = UnityEngine.Object.Instantiate(prefab, persistentParent, false);
-        _uiRoot.name = "UseItemsAnywhere_QuickUseWheel";
-        _uiRoot.SetActive(false);
-
-        try
-        {
-            BindPrefab();
-        }
-        catch (Exception exception)
-        {
-            logger.LogError($"Quick-use wheel prefab binding failed:\n{exception}");
-            UnityEngine.Object.Destroy(_uiRoot);
-            _uiRoot = null;
-            _bundle.Unload(false);
-            _bundle = null;
-            return;
-        }
-
-        _font = font;
-        _font.TryAssign(_uiRoot);
+        _document = ui.CreateDocument(
+            "Quick-use wheel",
+            "quickusewheel",
+            PrefabPath,
+            "UseItemsAnywhere_QuickUseWheel",
+            BindPrefab);
     }
 
     internal void Show()
     {
-        var root = _uiRoot;
-        if (!root)
+        if (_document?.IsAvailable != true)
         {
             return;
         }
 
-        _font?.TryAssign(root!);
-        root!.SetActive(true);
-        _canvasGroup!.alpha = 0f;
-        _wheelRoot!.localScale = Vector3.one * 0.92f;
+        _document.Show();
+        _transition!.BeginEntrance(0.92f);
     }
 
     internal void Hide()
     {
-        _uiRoot?.SetActive(false);
+        _document?.Hide();
     }
 
     internal void Refresh(
@@ -194,13 +144,12 @@ internal sealed class QuickUseWheelView
         QuickUseWheelItem? selectedItem,
         string selectionHint)
     {
-        if (!_uiRoot)
+        if (_document?.IsAvailable != true)
         {
             return;
         }
 
-        _canvasGroup!.alpha = Mathf.MoveTowards(_canvasGroup.alpha, 1f, Time.unscaledDeltaTime * 12f);
-        _wheelRoot!.localScale = Vector3.Lerp(_wheelRoot.localScale, Vector3.one, Time.unscaledDeltaTime * 18f);
+        _transition!.UpdateEntrance();
 
         for (var index = 0; index < pageItemCount; index++)
         {
@@ -247,29 +196,24 @@ internal sealed class QuickUseWheelView
 
     internal void Destroy()
     {
-        if (_uiRoot)
-        {
-            UnityEngine.Object.Destroy(_uiRoot);
-            _uiRoot = null;
-        }
-
-        _bundle?.Unload(false);
-        _bundle = null;
+        _document?.Destroy();
+        _document = null;
+        _transition = null;
         _views.Clear();
-        _font = null;
     }
 
-    private void BindPrefab()
+    private void BindPrefab(RuntimeUiDocument document)
     {
-        _canvasGroup = RequireComponent<CanvasGroup>(_uiRoot!.transform, string.Empty);
-        _wheelRoot = RequireComponent<RectTransform>(_uiRoot.transform, "WheelRoot");
-        _segmentTemplate = RequireComponent<Image>(_uiRoot.transform, "WheelRoot/SegmentLayer/SegmentTemplate");
-        _itemTemplate = RequireComponent<RectTransform>(_uiRoot.transform, "WheelRoot/ItemLayer/ItemTemplate");
-        _centerBorder = RequireComponent<Image>(_uiRoot.transform, "WheelRoot/CenterBorder");
-        _selectedName = RequireComponent<TMP_Text>(_uiRoot.transform, "WheelRoot/Center/SelectedName");
-        _cancelHint = RequireComponent<TMP_Text>(_uiRoot.transform, "WheelRoot/Center/CancelHint");
-        _pageHint = RequireComponent<TMP_Text>(_uiRoot.transform, "PageHint");
-        _controls = RequireComponent<TMP_Text>(_uiRoot.transform, "Controls");
+        var canvasGroup = document.Require<CanvasGroup>(string.Empty);
+        var wheelRoot = document.Require<RectTransform>("WheelRoot");
+        _transition = new RuntimeUiTransition(canvasGroup, wheelRoot);
+        _segmentTemplate = document.Require<Image>("WheelRoot/SegmentLayer/SegmentTemplate");
+        _itemTemplate = document.Require<RectTransform>("WheelRoot/ItemLayer/ItemTemplate");
+        _centerBorder = document.Require<Image>("WheelRoot/CenterBorder");
+        _selectedName = document.Require<TMP_Text>("WheelRoot/Center/SelectedName");
+        _cancelHint = document.Require<TMP_Text>("WheelRoot/Center/CancelHint");
+        _pageHint = document.Require<TMP_Text>("PageHint");
+        _controls = document.Require<TMP_Text>("Controls");
     }
 
     private void ClearViews()
@@ -297,22 +241,12 @@ internal sealed class QuickUseWheelView
             _views.Add(new SegmentView(
                 segment,
                 itemRoot,
-                RequireComponent<Image>(itemRoot, "Icon"),
-                RequireComponent<TMP_Text>(itemRoot, "Name"),
-                RequireComponent<TMP_Text>(itemRoot, "State"),
-                RequireComponent<TMP_Text>(itemRoot, "Source"),
-                RequireComponent<RectTransform>(itemRoot, "FavoriteBadge")));
+                RuntimeUiDocument.Require<Image>(itemRoot, "Icon"),
+                RuntimeUiDocument.Require<TMP_Text>(itemRoot, "Name"),
+                RuntimeUiDocument.Require<TMP_Text>(itemRoot, "State"),
+                RuntimeUiDocument.Require<TMP_Text>(itemRoot, "Source"),
+                RuntimeUiDocument.Require<RectTransform>(itemRoot, "FavoriteBadge")));
         }
-    }
-
-    private static T RequireComponent<T>(Transform root, string path) where T : Component
-    {
-        var target = string.IsNullOrEmpty(path) ? root : root.Find(path);
-        if (!target || !target.TryGetComponent<T>(out var component))
-        {
-            throw new InvalidOperationException($"Missing {typeof(T).Name} at '{path}'.");
-        }
-        return component;
     }
 
     private sealed class SegmentView(

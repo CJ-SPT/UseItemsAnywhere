@@ -18,7 +18,7 @@ public class Plugin : BaseUnityPlugin
 {
     private readonly QuickUseWheelController _quickUseWheel = new();
     private readonly ItemUseDelayTimerController _itemUseDelayTimer = new();
-    private RuntimeUiFont? _runtimeUiFont;
+    private RuntimeUiService? _runtimeUi;
 
     internal static ItemUseDelayTimerController? DelayTimer { get; private set; }
 
@@ -43,9 +43,9 @@ public class Plugin : BaseUnityPlugin
         DontDestroyOnLoad(this);
         Configuration.Init(Config);
         var pluginDirectory = Path.GetDirectoryName(Info.Location)!;
-        _runtimeUiFont = new RuntimeUiFont(Logger);
-        _quickUseWheel.Initialize(pluginDirectory, Logger, transform, _runtimeUiFont);
-        _itemUseDelayTimer.Initialize(pluginDirectory, Logger, transform, _runtimeUiFont);
+        _runtimeUi = new RuntimeUiService(pluginDirectory, Logger, transform);
+        _quickUseWheel.Initialize(Logger, _runtimeUi);
+        _itemUseDelayTimer.Initialize(_runtimeUi);
         DelayTimer = _itemUseDelayTimer;
 
         var fastAccessSlots = AccessTools.Field(
@@ -74,7 +74,7 @@ public class Plugin : BaseUnityPlugin
         DelayTimer = null;
         _itemUseDelayTimer.OnDestroy();
         _quickUseWheel.OnDestroy();
-        _runtimeUiFont?.Destroy();
-        _runtimeUiFont = null;
+        _runtimeUi?.Destroy();
+        _runtimeUi = null;
     }
 }

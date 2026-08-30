@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using EFT;
 using EFT.InventoryLogic;
-using EFT.UI.DragAndDrop;
 using UnityEngine;
 using UseItemsAnywhere.Patches;
+using UseItemsAnywhere.UI;
 
 namespace UseItemsAnywhere.QuickUseWheel;
 
@@ -40,15 +40,19 @@ internal sealed class QuickUseWheelInventory
     private readonly List<Item> _candidateItems = [];
     private readonly HashSet<Item> _seenItems = [];
     private readonly Dictionary<Item, EquipmentSlot> _sourceSlots = [];
-    private readonly Dictionary<Item, ItemIcon?> _iconCache = [];
     private readonly HashSet<string> _favoriteTemplateIds = new(StringComparer.Ordinal);
-    private Player? _iconCachePlayer;
+    private RuntimeUiService _ui = null!;
 
     internal IReadOnlyList<QuickUseWheelItem> Items => _items;
 
     internal bool HasQueuedItems => _items.Exists(static item => item.IsQueued);
 
     internal bool HasUsableItems => _items.Exists(static item => item.IsUsable);
+
+    internal void Initialize(RuntimeUiService ui)
+    {
+        _ui = ui;
+    }
 
     internal void LoadFavorites()
     {
@@ -68,11 +72,7 @@ internal sealed class QuickUseWheelInventory
         _items.Clear();
         var controller = player.InventoryController;
         var inventory = controller.Inventory;
-        if (!ReferenceEquals(_iconCachePlayer, player))
-        {
-            _iconCache.Clear();
-            _iconCachePlayer = player;
-        }
+        _ui.SetItemCachePlayer(player);
         _candidateItems.Clear();
         _seenItems.Clear();
         _sourceSlots.Clear();
@@ -167,14 +167,15 @@ internal sealed class QuickUseWheelInventory
             var sourceSlot = _sourceSlots.GetValueOrDefault(item, EquipmentSlot.Pockets);
             _items.Add(new QuickUseWheelItem(
                 item,
-                GetDisplayName(item),
-                GetFullName(item),
+                _ui.GetItemDisplayName(item, 18),
+                _ui.GetItemName(item),
                 state,
                 isUsable,
                 isQueued,
                 _favoriteTemplateIds.Contains(item.TemplateId.ToString()),
                 sourceSlot,
-                GetOrLoadIcon(item)));
+                RuntimeUiService.GetSlotName(sourceSlot),
+                _ui.GetItemIcon(item)));
         }
 
         _items.Sort(CompareWheelItems);
@@ -194,8 +195,6 @@ internal sealed class QuickUseWheelInventory
         _candidateItems.Clear();
         _seenItems.Clear();
         _sourceSlots.Clear();
-        _iconCache.Clear();
-        _iconCachePlayer = null;
     }
 
     internal void ToggleFavorite(QuickUseWheelItem selectedItem)
@@ -339,47 +338,4 @@ internal sealed class QuickUseWheelInventory
         return string.IsNullOrEmpty(second) ? first : $"{first} • {second}";
     }
 
-    private static string GetDisplayName(Item item)
-    {
-        var name = item.LocalizedShortName();
-        if (string.IsNullOrWhiteSpace(name) || string.Equals(name, item.ShortName, StringComparison.Ordinal))
-        {
-            name = GetFullName(item);
-        }
-        return name.Length > 18 ? $"{name[..16]}…" : name;
-    }
-
-    private static string GetFullName(Item item)
-    {
-        var name = item.LocalizedName();
-        if (!string.IsNullOrWhiteSpace(name)
-            && !string.Equals(name, item.Template.NameLocalizationKey, StringComparison.Ordinal))
-        {
-            return name;
-        }
-
-        name = item.LocalizedShortName();
-        return string.IsNullOrWhiteSpace(name) || string.Equals(name, item.ShortName, StringComparison.Ordinal)
-            ? item.TemplateId.ToString()
-            : name;
-    }
-
-    private ItemIcon? GetOrLoadIcon(Item item)
-    {
-        if (_iconCache.TryGetValue(item, out var cachedIcon) && cachedIcon?.Sprite)
-        {
-            return cachedIcon;
-        }
-
-        try
-        {
-            var icon = ItemViewFactory.LoadItemIcon(item, 1, false);
-            _iconCache[item] = icon;
-            return icon;
-        }
-        catch
-        {
-            return null;
-        }
-    }
 }
