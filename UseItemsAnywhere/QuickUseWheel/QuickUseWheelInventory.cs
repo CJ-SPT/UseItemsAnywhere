@@ -110,6 +110,17 @@ internal sealed class QuickUseWheelInventory
                 }
             }
         }
+        
+        if (Configuration.QuickUseShowGrenades.Value)
+        {
+            foreach (var item in inventory.GetItemsInSlots(Configuration.GrenadeThrowSlots.Value))
+            {
+                if (item is ThrowWeap && _seenItems.Add(item))
+                {
+                    _candidateItems.Add(item);
+                }
+            }
+        }
 
         if (Configuration.QuickUseShowMeds.Value)
         {

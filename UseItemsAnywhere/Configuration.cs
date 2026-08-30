@@ -47,6 +47,7 @@ public static class Configuration
     internal static ConfigEntry<string> QuickUseFavoriteTemplateIds = null!;
     public static ConfigEntry<bool> QuickUseShowPrimAndSecWeapons = null!;
     public static ConfigEntry<bool> QuickUseShowMelee = null!;
+    public static ConfigEntry<bool> QuickUseShowGrenades = null!;
     public static ConfigEntry<bool> QuickUseShowMeds = null!;
     public static ConfigEntry<bool> QuickUseShowFoodDrink = null!;
     public static ConfigEntry<bool> QuickUseShowFlares = null!;
@@ -140,6 +141,15 @@ public static class Configuration
             true,
             new ConfigDescription(
                 "Configures whether or not to show melee weapon in the quick wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+        
+        ConfigEntries.Add(QuickUseShowGrenades = configFile.Bind(
+            QuickUseWheel,
+            "Show Grenades",
+            true,
+            new ConfigDescription(
+                "Configures whether or not to show grenades in the quick wheel.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
         
