@@ -31,7 +31,7 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
             throw new InvalidOperationException("Failed to create the UI sprites.");
         }
 
-        CreatePrefab(circle, stripe);
+        CreatePrefab(circle);
         CreateItemUseDelayTimerPrefab(stripe);
         var importer = AssetImporter.GetAtPath(PrefabPath);
         importer.assetBundleName = BundleName;
@@ -137,7 +137,7 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         importer.SaveAndReimport();
     }
 
-    private static void CreatePrefab(Sprite circle, Sprite stripe)
+    private static void CreatePrefab(Sprite circle)
     {
         var root = new GameObject("QuickUseWheel", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(CanvasGroup));
         var rootRect = root.GetComponent<RectTransform>();
@@ -168,11 +168,10 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         outerFrame.rectTransform.sizeDelta = new Vector2(558f, 558f);
         var ringBack = CreateImage("RingBack", wheelRoot, circle, new Color(0.025f, 0.027f, 0.027f, 0.97f));
         ringBack.rectTransform.sizeDelta = new Vector2(554f, 554f);
-        var ringMask = ringBack.gameObject.AddComponent<Mask>();
-        ringMask.showMaskGraphic = true;
-        var ringStripe = CreateImage("DiagonalHatch", ringBack.transform, stripe, new Color(0.48f, 0.5f, 0.5f, 0.42f));
-        Stretch(ringStripe.rectTransform);
-        ringStripe.type = Image.Type.Tiled;
+        var ringInsetFrame = CreateImage("RingInsetFrame", wheelRoot, circle, new Color(0.12f, 0.13f, 0.13f, 0.82f));
+        ringInsetFrame.rectTransform.sizeDelta = new Vector2(536f, 536f);
+        var ringInset = CreateImage("RingInset", wheelRoot, circle, new Color(0.031f, 0.033f, 0.033f, 0.99f));
+        ringInset.rectTransform.sizeDelta = new Vector2(532f, 532f);
 
         var segmentLayer = CreateRect("SegmentLayer", wheelRoot, new Vector2(548f, 548f));
         var segment = CreateImage("SegmentTemplate", segmentLayer, circle, new Color(0.045f, 0.048f, 0.048f, 0.86f));
@@ -183,6 +182,24 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         segment.fillClockwise = true;
         segment.raycastTarget = false;
         segment.gameObject.SetActive(false);
+
+        var indexLayer = CreateRect("IndexLayer", wheelRoot, new Vector2(548f, 548f));
+        for (var index = 0; index < 12; index++)
+        {
+            var major = index % 3 == 0;
+            var tick = CreateImage(
+                $"Index_{index:00}",
+                indexLayer,
+                null,
+                major
+                    ? new Color(0.55f, 0.57f, 0.55f, 0.52f)
+                    : new Color(0.42f, 0.44f, 0.43f, 0.26f));
+            tick.rectTransform.sizeDelta = new Vector2(major ? 2f : 1f, major ? 14f : 8f);
+            var angle = index * 30f * Mathf.Deg2Rad;
+            tick.rectTransform.anchoredPosition = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle))
+                * (major ? 265f : 268f);
+            tick.rectTransform.localEulerAngles = new Vector3(0f, 0f, -index * 30f);
+        }
 
         var itemLayer = CreateRect("ItemLayer", wheelRoot, new Vector2(548f, 548f));
         var itemTemplate = CreateRect("ItemTemplate", itemLayer, new Vector2(132f, 140f));
@@ -206,7 +223,7 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         var itemName = CreateText("Name", itemTemplate, 15f, FontStyles.Bold, new Color(0.82f, 0.83f, 0.8f, 1f));
         itemName.rectTransform.sizeDelta = new Vector2(132f, 28f);
         itemName.rectTransform.anchoredPosition = new Vector2(0f, -10f);
-        var state = CreateText("State", itemTemplate, 11f, FontStyles.Normal, new Color(0.72f, 0.74f, 0.72f, 1f));
+        var state = CreateText("State", itemTemplate, 11f, FontStyles.Bold, new Color(0.72f, 0.74f, 0.72f, 1f));
         state.rectTransform.sizeDelta = new Vector2(132f, 20f);
         state.rectTransform.anchoredPosition = new Vector2(0f, -34f);
         var source = CreateText("Source", itemTemplate, 10f, FontStyles.Normal, new Color(0.45f, 0.47f, 0.46f, 1f));

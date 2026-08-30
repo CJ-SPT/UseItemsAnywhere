@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
@@ -15,10 +16,15 @@ namespace UseItemsAnywhere;
 
 internal sealed class QuickUseWheel
 {
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
+
     private const string PrefabPath = "assets/mods/useitemsanywhere.assets/ui/quickusewheel.prefab";
     private const float MaximumVisibleSegmentDegrees = 42f;
     private const float CenterCancelRadius = 104f;
     private const float EmptyWheelRefreshInterval = 0.15f;
+    private const float MouseSelectionSpeed = 24f;
+    private const float MaximumSelectionRadius = 280f;
 
     private static Player? _pendingOpenRequest;
 
@@ -26,8 +32,10 @@ internal sealed class QuickUseWheel
     private static readonly Color NormalSegmentColor = new(0.045f, 0.048f, 0.048f, 0.86f);
     private static readonly Color SelectedSegmentColor = new(0.22f, 0.25f, 0.26f, 0.96f);
     private static readonly Color UnavailableSegmentColor = new(0.13f, 0.055f, 0.045f, 0.9f);
+    private static readonly Color QueuedSegmentColor = new(0.16f, 0.135f, 0.075f, 0.94f);
     private static readonly Color NormalNameColor = new(0.82f, 0.83f, 0.8f, 1f);
     private static readonly Color UnavailableNameColor = new(0.43f, 0.44f, 0.42f, 1f);
+    private static readonly Color QueuedNameColor = new(0.73f, 0.66f, 0.43f, 1f);
     private static readonly EquipmentSlot[] SlotPriority =
     [
         EquipmentSlot.FirstPrimaryWeapon,
@@ -71,6 +79,7 @@ internal sealed class QuickUseWheel
     private TMP_Text? _selectedName;
     private TMP_Text? _cancelHint;
     private TMP_Text? _pageHint;
+    private TMP_Text? _controls;
     private TMP_FontAsset? _runtimeFont;
     private bool _ownsRuntimeFont;
     private ManualLogSource? _logger;
@@ -91,14 +100,12 @@ internal sealed class QuickUseWheel
     private float _nextEmptyWheelRefreshTime;
     private Player? _player;
     private Item? _pendingItemOnOpen;
-    private bool _pendingHighlightActive;
     private bool _openedFromPendingRequest;
+    private bool _pendingClickArmed;
     private Player? _iconCachePlayer;
     private GamePlayerOwner? _playerOwner;
     private bool _previousBlockFirearms;
     private Action<Player>? _previousRotationAction;
-    private bool _previousCursorVisible;
-    private CursorLockMode _previousCursorLockMode;
 
     internal static bool InputBlocked { get; private set; }
 
@@ -148,6 +155,7 @@ internal sealed class QuickUseWheel
             _selectedName = RequireComponent<TMP_Text>(_uiRoot.transform, "WheelRoot/Center/SelectedName");
             _cancelHint = RequireComponent<TMP_Text>(_uiRoot.transform, "WheelRoot/Center/CancelHint");
             _pageHint = RequireComponent<TMP_Text>(_uiRoot.transform, "PageHint");
+            _controls = RequireComponent<TMP_Text>(_uiRoot.transform, "Controls");
         }
         catch (Exception exception)
         {
@@ -164,10 +172,15 @@ internal sealed class QuickUseWheel
 
     internal void Update()
     {
-        if (!Configuration.EnableQuickUseWheel.Value || !Application.isFocused)
+        if (!Configuration.EnableQuickUseWheel.Value)
         {
             _pendingOpenRequest = null;
             Close(false);
+            return;
+        }
+
+        if (!Application.isFocused && !_isOpen)
+        {
             return;
         }
 
@@ -219,7 +232,6 @@ internal sealed class QuickUseWheel
                 ToggleSelectedFavorite();
             }
             UpdatePresentation();
-            ShowCursor();
 
             if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
             {
@@ -229,7 +241,11 @@ internal sealed class QuickUseWheel
             }
 
 
-            if (_openedFromPendingRequest && Input.GetMouseButtonDown(0))
+            if (_openedFromPendingRequest && !_pendingClickArmed)
+            {
+                _pendingClickArmed = !Input.GetMouseButton(0);
+            }
+            else if (_openedFromPendingRequest && Input.GetMouseButtonDown(0))
             {
                 var useSelection = _selectedIndex >= 0 && GetSelectedItem()?.IsUsable == true;
                 Close(useSelection);
@@ -239,13 +255,12 @@ internal sealed class QuickUseWheel
             var scroll = Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) > 0.01f && PageCount > 1)
             {
-                _pendingHighlightActive = false;
                 _page = Mod(_page + (scroll < 0f ? 1 : -1), PageCount);
                 RefreshWheel();
             }
         }
 
-        if (_shortcutHeld && !shortcut.IsPressed())
+        if (_shortcutHeld && !IsShortcutMainKeyPressed(shortcut))
         {
             var useSelection = _isOpen
                 && !_cancelled
@@ -308,7 +323,8 @@ internal sealed class QuickUseWheel
         }
         
         var hasPendingAccess = ItemAccessDelayPatch.TryGetPendingItem(player, out var pendingItem);
-        if (hasPendingAccess && Configuration.PendingItemUseBehavior.Value != Configuration.PendingUseMode.OpenWheel)
+        var pendingMode = Configuration.PendingItemUseBehavior.Value;
+        if (hasPendingAccess && pendingMode == Configuration.PendingUseMode.Ignore)
         {
 #if DEBUG
             _logger?.LogDebug("Quick-use wheel was suppressed while an item-access delay is pending.");
@@ -320,18 +336,15 @@ internal sealed class QuickUseWheel
         _playerOwner = playerOwner;
         _pendingItemOnOpen = hasPendingAccess ? pendingItem : null;
         _openedFromPendingRequest = openedFromPendingRequest && hasPendingAccess;
+        _pendingClickArmed = false;
         _items.Clear();
         PopulateUsableItems(player);
 #if DEBUG
         _logger?.LogDebug($"Opening quick-use wheel with {_items.Count} usable item(s).");
 #endif
         _selectionVector = Vector2.zero;
-        var pendingIndex = _pendingItemOnOpen is null
-            ? -1
-            : _items.FindIndex(wheelItem => ReferenceEquals(wheelItem.Item, _pendingItemOnOpen));
-        _pendingHighlightActive = pendingIndex >= 0;
-        _selectedIndex = _pendingHighlightActive ? pendingIndex % ItemsPerPage : -1;
-        _page = _pendingHighlightActive ? pendingIndex / ItemsPerPage : 0;
+        _selectedIndex = -1;
+        _page = 0;
         _pageStartIndex = 0;
         _pageItemCount = 0;
         _nextEmptyWheelRefreshTime = Time.unscaledTime + EmptyWheelRefreshInterval;
@@ -341,11 +354,8 @@ internal sealed class QuickUseWheel
 
         _previousBlockFirearms = player.MovementContext.BlockFirearms;
         _previousRotationAction = player.MovementContext.RotationAction;
-        _previousCursorVisible = Cursor.visible;
-        _previousCursorLockMode = Cursor.lockState;
         player.MovementContext.BlockFirearms = true;
         player.MovementContext.RotationAction = null;
-        ShowCursor();
 
         TryAssignRuntimeFont();
         _uiRoot!.SetActive(true);
@@ -356,7 +366,9 @@ internal sealed class QuickUseWheel
 
     private void RefreshUnavailableWheel()
     {
-        if (_items.Exists(static item => item.IsUsable)
+        var hasQueuedItems = _items.Exists(static item => item.IsQueued);
+        var hadUsableItem = _items.Exists(static item => item.IsUsable);
+        if ((!hasQueuedItems && hadUsableItem)
             || _player is null
             || !_player
             || Time.unscaledTime < _nextEmptyWheelRefreshTime)
@@ -367,24 +379,15 @@ internal sealed class QuickUseWheel
         _nextEmptyWheelRefreshTime = Time.unscaledTime + EmptyWheelRefreshInterval;
         _items.Clear();
         PopulateUsableItems(_player);
-        if (!_items.Exists(static item => item.IsUsable))
-        {
-            RefreshWheel();
-            return;
-        }
+        _page = Mathf.Clamp(_page, 0, PageCount - 1);
+        RefreshWheel();
 
 #if DEBUG
-        _logger?.LogDebug("Quick-use wheel recovered an available item after a transient refresh.");
+        if (!hadUsableItem && _items.Exists(static item => item.IsUsable))
+        {
+            _logger?.LogDebug("Quick-use wheel recovered an available item after a transient refresh.");
+        }
 #endif
-        _selectionVector = Vector2.zero;
-        var pendingIndex = _pendingItemOnOpen is null
-            ? -1
-            : _items.FindIndex(wheelItem => ReferenceEquals(wheelItem.Item, _pendingItemOnOpen));
-        _pendingHighlightActive = pendingIndex >= 0;
-        _selectedIndex = _pendingHighlightActive ? pendingIndex % ItemsPerPage : -1;
-        _page = _pendingHighlightActive ? pendingIndex / ItemsPerPage : 0;
-        _pageStartIndex = 0;
-        RefreshWheel();
     }
 
     private void Close(bool useSelection)
@@ -398,7 +401,11 @@ internal sealed class QuickUseWheel
 
         var player = _player;
         var selectedItem = useSelection ? GetSelectedItem()?.Item : null;
-        var pendingItem = _pendingItemOnOpen;
+        var pendingItem = player is not null
+            && player
+            && ItemAccessDelayPatch.TryGetPendingItem(player, out var currentPendingItem)
+                ? currentPendingItem
+                : null;
 
         RestoreInput();
         _shortcutHeld = false;
@@ -410,21 +417,30 @@ internal sealed class QuickUseWheel
         _player = null;
         _playerOwner = null;
         _pendingItemOnOpen = null;
-        _pendingHighlightActive = false;
         _openedFromPendingRequest = false;
+        _pendingClickArmed = false;
         _uiRoot?.SetActive(false);
-        Cursor.visible = _previousCursorVisible;
-        Cursor.lockState = _previousCursorLockMode;
 
         if (player is not null && player && selectedItem != null && IsItemStillUsable(player, selectedItem))
         {
             if (pendingItem is not null && !ReferenceEquals(pendingItem, selectedItem))
             {
-                ItemAccessDelayPatch.ReplacePendingItemAccess(
-                    player,
-                    selectedItem,
-                    IgnoreHandsResult,
-                    false);
+                if (Configuration.PendingItemUseBehavior.Value == Configuration.PendingUseMode.QueueOne)
+                {
+                    ItemAccessDelayPatch.QueuePendingItemAccess(
+                        player,
+                        selectedItem,
+                        IgnoreHandsResult,
+                        false);
+                }
+                else
+                {
+                    ItemAccessDelayPatch.ReplacePendingItemAccess(
+                        player,
+                        selectedItem,
+                        IgnoreHandsResult,
+                        false);
+                }
             }
             else if (pendingItem is null)
             {
@@ -463,9 +479,12 @@ internal sealed class QuickUseWheel
 
         if (_pageItemCount == 0)
         {
-            _selectedName!.text = "NO USABLE ITEMS";
-            _cancelHint!.text = "RELEASE TO CLOSE";
+            _selectedName!.text = "NO ITEMS\nAVAILABLE";
+            _cancelHint!.text = "CHECK YOUR LOADOUT";
+            _centerBorder!.color = new Color(0.34f, 0.36f, 0.36f, 0.96f);
             _pageHint!.gameObject.SetActive(false);
+            _controls!.text = "RELEASE / ESC / RIGHT CLICK TO CLOSE";
+            _presentedSelectedIndex = -1;
             return;
         }
 
@@ -495,13 +514,22 @@ internal sealed class QuickUseWheel
             view.Icon.sprite = wheelItem.Icon?.Sprite;
             // Implicit conversion to bool, I know, it looks weird, comparing to null is more expensive
             view.Icon.enabled = view.Icon.sprite;
-            view.Icon.color = wheelItem.IsUsable ? Color.white : UnavailableNameColor;
+            view.Icon.color = wheelItem.IsQueued
+                ? QueuedNameColor
+                : wheelItem.IsUsable ? Color.white : UnavailableNameColor;
             view.Name.text = wheelItem.DisplayName;
             view.State.text = wheelItem.State;
+            view.State.color = wheelItem.IsQueued
+                ? QueuedNameColor
+                : new Color(0.72f, 0.74f, 0.72f, 1f);
             view.State.gameObject.SetActive(
-                Configuration.QuickUseShowItemState.Value
+                wheelItem.IsQueued
+                || Configuration.QuickUseShowItemState.Value
                 && !string.IsNullOrEmpty(wheelItem.State));
             view.Source.text = wheelItem.SourceName;
+            view.Source.color = wheelItem.IsQueued
+                ? new Color(0.54f, 0.49f, 0.34f, 1f)
+                : new Color(0.45f, 0.47f, 0.46f, 1f);
             view.Source.gameObject.SetActive(Configuration.QuickUseShowSourceSlot.Value);
             view.FavoriteBadge.gameObject.SetActive(wheelItem.IsFavorite);
         }
@@ -509,6 +537,9 @@ internal sealed class QuickUseWheel
         _cancelHint!.text = "CENTER TO CANCEL";
         _pageHint!.gameObject.SetActive(PageCount > 1);
         _pageHint.text = PageCount > 1 ? $"PAGE {_page + 1} / {PageCount}   •   MOUSE WHEEL" : string.Empty;
+        _controls!.text = _openedFromPendingRequest
+            ? "LMB CONFIRM   •   MMB FAVORITE   •   ESC / RIGHT CLICK TO CLOSE"
+            : "RELEASE TO USE   •   MMB FAVORITE   •   ESC / RIGHT CLICK TO CANCEL";
         _presentedSelectedIndex = int.MinValue;
         UpdatePresentation();
     }
@@ -529,12 +560,16 @@ internal sealed class QuickUseWheel
             var view = _views[index];
             var wheelItem = GetPageItem(index);
             view.IsSelected = selected;
-            view.Segment.color = !wheelItem.IsUsable
-                ? UnavailableSegmentColor
-                : selected ? SelectedSegmentColor : NormalSegmentColor;
-            view.Name.color = !wheelItem.IsUsable
-                ? UnavailableNameColor
-                : selected ? Color.white : NormalNameColor;
+            view.Segment.color = wheelItem.IsQueued
+                ? QueuedSegmentColor
+                : !wheelItem.IsUsable
+                    ? UnavailableSegmentColor
+                    : selected ? SelectedSegmentColor : NormalSegmentColor;
+            view.Name.color = wheelItem.IsQueued
+                ? QueuedNameColor
+                : !wheelItem.IsUsable
+                    ? UnavailableNameColor
+                    : selected ? Color.white : NormalNameColor;
             view.ItemRoot.localScale = Vector3.Lerp(
                 view.ItemRoot.localScale,
                 selected ? Vector3.one * 1.08f : Vector3.one,
@@ -551,19 +586,11 @@ internal sealed class QuickUseWheel
             _presentedSelectedIndex = _selectedIndex;
             var selectedItem = GetSelectedItem();
             _selectedName!.text = selectedItem?.FullName ?? "CANCEL";
-            _cancelHint!.text = _openedFromPendingRequest
-                ? selectedItem.HasValue
-                    ? ReferenceEquals(selectedItem.Value.Item, _pendingItemOnOpen)
-                        ? "CURRENTLY PENDING  •  LMB: KEEP"
-                        : selectedItem.Value.IsUsable ? "LMB: REPLACE" : "ITEM UNAVAILABLE"
-                    : "LMB: CLOSE"
+            _cancelHint!.text = GetSelectionHint(selectedItem);
+            _centerBorder!.color = selectedItem is { IsQueued: true }
+                ? QueuedSegmentColor
                 : selectedItem is { IsUsable: false }
-                ? "ITEM UNAVAILABLE"
-                : selectedItem.HasValue
-                    ? selectedItem.Value.IsFavorite ? "MMB: UNFAVORITE" : "MMB: FAVORITE"
-                    : "CENTER TO CANCEL";
-            _centerBorder!.color = selectedItem is { IsUsable: false }
-                ? UnavailableSegmentColor
+                    ? UnavailableSegmentColor
                 : selectedItem.HasValue
                     ? new Color(0.58f, 0.61f, 0.61f, 0.96f)
                     : new Color(0.34f, 0.36f, 0.36f, 0.96f);
@@ -587,6 +614,47 @@ internal sealed class QuickUseWheel
                 RequireComponent<TMP_Text>(itemRoot, "Source"),
                 RequireComponent<RectTransform>(itemRoot, "FavoriteBadge")));
         }
+    }
+
+    private string GetSelectionHint(WheelItem? selectedItem)
+    {
+        if (selectedItem is { IsQueued: true })
+        {
+            return "QUEUED  •  WAITING FOR ACCESS";
+        }
+
+        if (_openedFromPendingRequest)
+        {
+            if (!selectedItem.HasValue)
+            {
+                return "LMB: CLOSE";
+            }
+            if (ReferenceEquals(selectedItem.Value.Item, _pendingItemOnOpen))
+            {
+                return "CURRENTLY PENDING  •  LMB: KEEP";
+            }
+            return selectedItem.Value.IsUsable ? "LMB: REPLACE" : "ITEM UNAVAILABLE";
+        }
+
+        if (selectedItem is { IsUsable: false })
+        {
+            return "ITEM UNAVAILABLE";
+        }
+        if (!selectedItem.HasValue)
+        {
+            return "CENTER TO CANCEL";
+        }
+        if (_pendingItemOnOpen is not null)
+        {
+            if (ReferenceEquals(selectedItem.Value.Item, _pendingItemOnOpen))
+            {
+                return "CURRENTLY PENDING";
+            }
+            return Configuration.PendingItemUseBehavior.Value == Configuration.PendingUseMode.QueueOne
+                ? "RELEASE TO QUEUE"
+                : "RELEASE TO REPLACE";
+        }
+        return selectedItem.Value.IsFavorite ? "MMB: UNFAVORITE" : "MMB: FAVORITE";
     }
 
     private void LoadFavorites()
@@ -632,22 +700,16 @@ internal sealed class QuickUseWheel
 
     private void UpdateSelection()
     {
-        if (_wheelRoot is null
-            || !RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                _wheelRoot,
-                Input.mousePosition,
-                null,
-                out _selectionVector))
+        var mouseDelta = new Vector2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y"));
+        if (mouseDelta.sqrMagnitude > 100f)
         {
-            _selectionVector = Vector2.zero;
+            mouseDelta = mouseDelta.normalized * 10f;
         }
-        UpdateSelectedIndex();
-    }
 
-    private static void ShowCursor()
-    {
-        Cursor.lockState = CursorLockMode.Confined;
-        Cursor.visible = true;
+        _selectionVector = Vector2.ClampMagnitude(
+            _selectionVector + mouseDelta * MouseSelectionSpeed,
+            MaximumSelectionRadius);
+        UpdateSelectedIndex();
     }
 
     private void UpdateSelectedIndex()
@@ -661,14 +723,9 @@ internal sealed class QuickUseWheel
 
         if (_selectionVector.magnitude <= CenterCancelRadius)
         {
-            if (!_pendingHighlightActive)
-            {
-                _selectedIndex = -1;
-            }
+            _selectedIndex = -1;
             return;
         }
-
-        _pendingHighlightActive = false;
 
         var degrees = Mathf.Atan2(_selectionVector.x, _selectionVector.y) * Mathf.Rad2Deg;
         if (degrees < 0f)
@@ -680,6 +737,7 @@ internal sealed class QuickUseWheel
         var visibleSegmentDegrees = Mathf.Min(slice - Mathf.Min(2f, slice * 0.08f), MaximumVisibleSegmentDegrees);
         var degreesFromCandidateCenter = Mathf.Abs(Mathf.DeltaAngle(degrees, candidateIndex * slice));
         _selectedIndex = degreesFromCandidateCenter <= visibleSegmentDegrees * 0.5f
+            && !GetPageItem(candidateIndex).IsQueued
             ? candidateIndex
             : -1;
     }
@@ -811,11 +869,15 @@ internal sealed class QuickUseWheel
                 continue;
             }
 
+            var isQueued = ItemAccessDelayPatch.IsQueuedForAccess(player, item);
             var hasResource = HasResource(item);
-            var isUsable = hasResource
+            var isUsable = !isQueued
+                && hasResource
                 && controller.IsAtReachablePlace(item)
                 && item.CheckAction(null).Succeeded;
-            var state = !hasResource
+            var state = isQueued
+                ? "QUEUED"
+                : !hasResource
                 ? "EMPTY"
                 : !isUsable ? "UNAVAILABLE" : GetItemState(item);
             var sourceSlot = _sourceSlots.GetValueOrDefault(item, EquipmentSlot.Pockets);
@@ -825,6 +887,7 @@ internal sealed class QuickUseWheel
                 GetFullName(item),
                 state,
                 isUsable,
+                isQueued,
                 _favoriteTemplateIds.Contains(item.TemplateId.ToString()),
                 sourceSlot,
                 GetOrLoadIcon(item)));
@@ -1150,6 +1213,76 @@ internal sealed class QuickUseWheel
 
     private static int Mod(int value, int modulo) => (value % modulo + modulo) % modulo;
 
+    private static bool IsShortcutMainKeyPressed(BepInEx.Configuration.KeyboardShortcut shortcut)
+    {
+        if (shortcut.IsPressed())
+        {
+            return true;
+        }
+
+        var virtualKey = GetVirtualKey(shortcut.MainKey);
+        return virtualKey != 0 && (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+    }
+
+    private static int GetVirtualKey(KeyCode key)
+    {
+        var value = (int)key;
+        if (value >= (int)KeyCode.A && value <= (int)KeyCode.Z)
+        {
+            return value - 32;
+        }
+        if (value >= (int)KeyCode.Alpha0 && value <= (int)KeyCode.Alpha9)
+        {
+            return value;
+        }
+        if (value >= (int)KeyCode.Keypad0 && value <= (int)KeyCode.Keypad9)
+        {
+            return 0x60 + value - (int)KeyCode.Keypad0;
+        }
+        if (value >= (int)KeyCode.F1 && value <= (int)KeyCode.F15)
+        {
+            return 0x70 + value - (int)KeyCode.F1;
+        }
+
+        return key switch
+        {
+            KeyCode.Backspace => 0x08,
+            KeyCode.Tab => 0x09,
+            KeyCode.Return or KeyCode.KeypadEnter => 0x0D,
+            KeyCode.Pause => 0x13,
+            KeyCode.CapsLock => 0x14,
+            KeyCode.Escape => 0x1B,
+            KeyCode.Space => 0x20,
+            KeyCode.PageUp => 0x21,
+            KeyCode.PageDown => 0x22,
+            KeyCode.End => 0x23,
+            KeyCode.Home => 0x24,
+            KeyCode.LeftArrow => 0x25,
+            KeyCode.UpArrow => 0x26,
+            KeyCode.RightArrow => 0x27,
+            KeyCode.DownArrow => 0x28,
+            KeyCode.Insert => 0x2D,
+            KeyCode.Delete => 0x2E,
+            KeyCode.KeypadMultiply => 0x6A,
+            KeyCode.KeypadPlus => 0x6B,
+            KeyCode.KeypadMinus => 0x6D,
+            KeyCode.KeypadPeriod => 0x6E,
+            KeyCode.KeypadDivide => 0x6F,
+            KeyCode.Numlock => 0x90,
+            KeyCode.ScrollLock => 0x91,
+            KeyCode.LeftShift => 0xA0,
+            KeyCode.RightShift => 0xA1,
+            KeyCode.LeftControl => 0xA2,
+            KeyCode.RightControl => 0xA3,
+            KeyCode.LeftAlt => 0xA4,
+            KeyCode.RightAlt => 0xA5,
+            KeyCode.Mouse0 => 0x01,
+            KeyCode.Mouse1 => 0x02,
+            KeyCode.Mouse2 => 0x04,
+            _ => 0,
+        };
+    }
+
     private sealed class SegmentView(
         Image segment,
         RectTransform itemRoot,
@@ -1175,6 +1308,7 @@ internal sealed class QuickUseWheel
         string fullName,
         string state,
         bool isUsable,
+        bool isQueued,
         bool isFavorite,
         EquipmentSlot sourceSlot,
         ItemIcon? icon)
@@ -1184,6 +1318,7 @@ internal sealed class QuickUseWheel
         internal string FullName { get; } = fullName;
         internal string State { get; } = state;
         internal bool IsUsable { get; } = isUsable;
+        internal bool IsQueued { get; } = isQueued;
         internal bool IsFavorite { get; } = isFavorite;
         internal EquipmentSlot SourceSlot { get; } = sourceSlot;
         internal ItemIcon? Icon { get; } = icon;
@@ -1195,6 +1330,7 @@ internal sealed class QuickUseWheel
             FullName,
             State,
             IsUsable,
+            IsQueued,
             value,
             SourceSlot,
             Icon);

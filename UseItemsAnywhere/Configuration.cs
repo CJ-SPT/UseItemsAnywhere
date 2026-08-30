@@ -353,7 +353,7 @@ public static class Configuration
         ConfigEntries.Add(PendingItemUseBehavior = configFile.Bind(
             SlotAccessDelays,
             "Pending Item Use Behavior",
-            PendingUseMode.Ignore,
+            PendingUseMode.CancelAndReplace,
             new ConfigDescription(
                 "Controls item-use attempts made while an access delay is active: ignore them, cancel and use the latest item, queue the first extra item, or open the wheel to choose a replacement.",
                 null,

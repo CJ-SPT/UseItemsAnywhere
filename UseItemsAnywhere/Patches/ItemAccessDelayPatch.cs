@@ -16,6 +16,7 @@ namespace UseItemsAnywhere.Patches;
 internal sealed class ItemAccessDelayPatch : ModulePatch
 {
     private static readonly Dictionary<Player, PendingAccess> PendingPlayers = [];
+    private static readonly Dictionary<Player, Item> WaitingForCurrentUse = [];
     private static readonly HashSet<Player> BypassPlayers = [];
 
     internal static void ClearPendingItemAccess()
@@ -25,6 +26,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             pendingAccess.FollowUp = null;
             pendingAccess.IsCancelled = true;
         }
+        WaitingForCurrentUse.Clear();
     }
 
     internal static bool TryGetPendingItem(Player player, out Item item)
@@ -37,6 +39,16 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
 
         item = null!;
         return false;
+    }
+
+    internal static bool IsQueuedForAccess(Player player, Item item)
+    {
+        return WaitingForCurrentUse.TryGetValue(player, out var waitingItem)
+                && ReferenceEquals(waitingItem, item)
+            || PendingPlayers.TryGetValue(player, out var pendingAccess)
+                && (ReferenceEquals(pendingAccess.Item, item)
+                    || pendingAccess.FollowUp is { } followUp
+                    && ReferenceEquals(followUp.Item, item));
     }
 
     internal static bool ReplacePendingItemAccess(
@@ -59,8 +71,33 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             delayInfo = replacementDelay;
         }
 
-        pendingAccess.FollowUp = new PendingRequest(item, completeCallback, scheduled, delayInfo);
+        pendingAccess.FollowUp = new PendingRequest(item, completeCallback, true, delayInfo);
         pendingAccess.IsCancelled = true;
+        return true;
+    }
+
+    internal static bool QueuePendingItemAccess(
+        Player player,
+        Item item,
+        Callback<IHandsController> completeCallback,
+        bool scheduled)
+    {
+        if (!PendingPlayers.TryGetValue(player, out var pendingAccess)
+            || pendingAccess.FollowUp.HasValue
+            || ReferenceEquals(pendingAccess.Item, item))
+        {
+            return false;
+        }
+
+        Configuration.ItemAccessDelayInfo? delayInfo = null;
+        if (ShouldDelay(item)
+            && Configuration.TryGetItemAccessDelay(player.InventoryController.Inventory, item, out var queuedDelay)
+            && queuedDelay.TotalDelay > 0f)
+        {
+            delayInfo = queuedDelay;
+        }
+
+        pendingAccess.FollowUp = new PendingRequest(item, completeCallback, true, delayInfo, true);
         return true;
     }
 
@@ -115,7 +152,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                     pendingAccess.IsCancelled = true;
                     break;
                 case Configuration.PendingUseMode.QueueOne:
-                    pendingAccess.FollowUp ??= queuedRequest;
+                    pendingAccess.FollowUp ??= queuedRequest.AfterCurrentItemIsUsed();
                     break;
                 case Configuration.PendingUseMode.Ignore:
                     break;
@@ -201,20 +238,53 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                 yield break;
             }
 
+            var completeCallback = request.CompleteCallback;
+            if (pendingAccess.FollowUp is { StartAfterCurrentUse: true } queuedFollowUp)
+            {
+                pendingAccess.FollowUp = null;
+                WaitingForCurrentUse[player] = queuedFollowUp.Item;
+                completeCallback = result =>
+                {
+                    request.CompleteCallback?.Invoke(result);
+
+                    if (result.Failed || !player || result.Value is not IQuickUseItem quickUseItem)
+                    {
+                        WaitingForCurrentUse.Remove(player);
+                        return;
+                    }
+
+                    var restorePreviousItem = quickUseItem.GetOnUsedCallback();
+                    quickUseItem.SetOnUsedCallback(useResult =>
+                    {
+                        restorePreviousItem?.Invoke(useResult);
+                        WaitingForCurrentUse.Remove(player);
+
+                        if (useResult.Succeed && player)
+                        {
+                            StartFollowUp(player, queuedFollowUp);
+                        }
+                    });
+                };
+            }
+
             BypassPlayers.Add(player);
-            player.TryProceed(request.Item, request.CompleteCallback, request.Scheduled);
+            player.TryProceed(request.Item, completeCallback, request.Scheduled);
             completed = true;
         }
         finally
         {
             presentation?.Finish(completed);
+            BypassPlayers.Remove(player);
+            if (!completed)
+            {
+                WaitingForCurrentUse.Remove(player);
+            }
 
             if (PendingPlayers.TryGetValue(player, out var current)
                 && ReferenceEquals(current, pendingAccess))
             {
                 PendingPlayers.Remove(player);
             }
-            BypassPlayers.Remove(player);
 
             var followUp = pendingAccess.FollowUp;
             if (followUp.HasValue && player)
@@ -226,6 +296,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
 
     private static void StartFollowUp(Player player, PendingRequest request)
     {
+        WaitingForCurrentUse.Remove(player);
         if (Configuration.EnableSlotDelays.Value && request.DelayInfo.HasValue)
         {
             StartPendingAccess(player, request, request.DelayInfo.Value);
@@ -239,7 +310,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
 
     private sealed class PendingAccess(Item item)
     {
-        internal Item Item { get; } = item;
+        internal Item Item { get; set; } = item;
         internal bool IsCancelled;
         internal PendingRequest? FollowUp;
     }
@@ -248,11 +319,20 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         Item item,
         Callback<IHandsController> completeCallback,
         bool scheduled,
-        Configuration.ItemAccessDelayInfo? delayInfo)
+        Configuration.ItemAccessDelayInfo? delayInfo,
+        bool startAfterCurrentUse = false)
     {
         internal Item Item { get; } = item;
         internal Callback<IHandsController> CompleteCallback { get; } = completeCallback;
         internal bool Scheduled { get; } = scheduled;
         internal Configuration.ItemAccessDelayInfo? DelayInfo { get; } = delayInfo;
+        internal bool StartAfterCurrentUse { get; } = startAfterCurrentUse;
+
+        internal PendingRequest AfterCurrentItemIsUsed() => new(
+            Item,
+            CompleteCallback,
+            true,
+            DelayInfo,
+            true);
     }
 }
