@@ -9,7 +9,7 @@ using UseItemsAnywhere.Patches;
 
 namespace UseItemsAnywhere
 {
-    [BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.1.0")]
+    [BepInPlugin("com.cj.useFromAnywhere", "R.A.T. - Radial Access Toolkit", "2.1.1")]
     [BepInDependency("com.SPT.custom", "4.1.0")]
     public class Plugin : BaseUnityPlugin
     {

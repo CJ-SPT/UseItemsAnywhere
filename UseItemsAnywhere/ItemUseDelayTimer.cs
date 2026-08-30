@@ -4,6 +4,7 @@ using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
 using EFT.InventoryLogic;
+using EFT.UI;
 using EFT.UI.DragAndDrop;
 using TMPro;
 using UnityEngine;
@@ -14,6 +15,8 @@ namespace UseItemsAnywhere;
 internal sealed class ItemUseDelayTimer
 {
     private const string PrefabPath = "assets/mods/useitemsanywhere.assets/ui/itemusedelaytimer.prefab";
+    private const float ExitHoldDuration = 0.08f;
+    private const float ExitFadeDuration = 0.18f;
 
     private AssetBundle? _bundle;
     private GameObject? _uiRoot;
@@ -23,6 +26,9 @@ internal sealed class ItemUseDelayTimer
     private Image? _progressFill;
     private TMP_Text? _itemName;
     private TMP_Text? _remainingTime;
+    private TMP_Text? _statusText;
+    private TMP_Text? _detailText;
+    private TMP_Text? _cancelHint;
     private ItemIcon? _itemIcon;
     private TMP_FontAsset? _runtimeFont;
     private bool _ownsRuntimeFont;
@@ -34,6 +40,10 @@ internal sealed class ItemUseDelayTimer
     private int _nextPresentationId;
     private int _activePresentationId;
     private bool _visible;
+    private bool _exiting;
+    private float _exitStartTime;
+    private float _exitStartAlpha;
+    private Vector3 _exitStartScale;
 
     internal void Initialize(string pluginDirectory, ManualLogSource logger, Transform persistentParent)
     {
@@ -73,6 +83,9 @@ internal sealed class ItemUseDelayTimer
             _progressFill = RequireComponent<Image>(_uiRoot.transform, "TimerRoot/ProgressTrack/ProgressFill");
             _itemName = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/ItemName");
             _remainingTime = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/RemainingTime");
+            _statusText = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/Eyebrow");
+            _detailText = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/Detail");
+            _cancelHint = RequireComponent<TMP_Text>(_uiRoot.transform, "TimerRoot/CancelHint");
         }
         catch (Exception exception)
         {
@@ -87,7 +100,10 @@ internal sealed class ItemUseDelayTimer
         TryAssignRuntimeFont();
     }
 
-    internal Presentation? Begin(Player player, Item item, float duration)
+    internal Presentation? Begin(
+        Player player,
+        Item item,
+        Configuration.ItemAccessDelayInfo delayInfo)
     {
         if (!_uiRoot || !_canvasGroup || !_timerRoot || !IsCurrentLocalPlayer(player))
         {
@@ -95,12 +111,16 @@ internal sealed class ItemUseDelayTimer
         }
 
         TryAssignRuntimeFont();
+        HideImmediately();
         var presentationId = ++_nextPresentationId;
         _activePresentationId = presentationId;
         _player = player;
-        _duration = Mathf.Max(duration, 0.01f);
+        _duration = Mathf.Max(delayInfo.TotalDelay, 0.01f);
         _itemName!.text = GetItemName(item);
-        _remainingTime!.text = $"{duration:0.0}s";
+        _remainingTime!.text = $"{delayInfo.TotalDelay:0.0}s";
+        _statusText!.text = $"ACCESSING ITEM  •  {GetSlotName(delayInfo.SourceSlot)}";
+        _detailText!.text = GetDelayDetail(delayInfo);
+        SetCancelHint();
         _progressFill!.rectTransform.anchorMax = Vector2.one;
         _itemIcon = LoadItemIcon(item);
         _icon!.sprite = _itemIcon?.Sprite;
@@ -119,9 +139,21 @@ internal sealed class ItemUseDelayTimer
             return;
         }
 
-        if (!Configuration.ShowTimerPanel.Value || !IsCurrentLocalPlayer(_player))
+        if (!IsCurrentLocalPlayer(_player))
         {
-            HideActive();
+            HideImmediately();
+            return;
+        }
+
+        if (_exiting)
+        {
+            UpdateExitAnimation();
+            return;
+        }
+
+        if (!Configuration.ShowTimerPanel.Value)
+        {
+            HideImmediately();
             return;
         }
 
@@ -148,17 +180,49 @@ internal sealed class ItemUseDelayTimer
         _progressFill!.rectTransform.anchorMax = new Vector2(Mathf.Clamp01(remaining / _duration), 1f);
     }
 
-    private void End(int presentationId)
+    private void End(int presentationId, bool completed)
     {
-        if (presentationId == _activePresentationId)
+        if (presentationId != _activePresentationId)
         {
-            HideActive();
+            return;
+        }
+
+        _activePresentationId = 0;
+        _statusText!.text = completed ? "ITEM READY" : "ACCESS CANCELLED";
+        _remainingTime!.text = completed ? "READY" : string.Empty;
+        _cancelHint!.gameObject.SetActive(false);
+        if (completed)
+        {
+            _progressFill!.rectTransform.anchorMax = new Vector2(0f, 1f);
+        }
+        PlayResultSound(completed);
+        _exiting = true;
+        _exitStartTime = Time.unscaledTime;
+        _exitStartAlpha = _canvasGroup!.alpha;
+        _exitStartScale = _timerRoot!.localScale;
+    }
+
+    private void UpdateExitAnimation()
+    {
+        var elapsed = Time.unscaledTime - _exitStartTime;
+        if (elapsed <= ExitHoldDuration)
+        {
+            return;
+        }
+
+        var progress = Mathf.Clamp01((elapsed - ExitHoldDuration) / ExitFadeDuration);
+        _canvasGroup!.alpha = Mathf.Lerp(_exitStartAlpha, 0f, progress);
+        _timerRoot!.localScale = Vector3.Lerp(_exitStartScale, Vector3.one * 0.96f, progress);
+        if (progress >= 1f)
+        {
+            HideImmediately();
         }
     }
 
-    private void HideActive()
+    private void HideImmediately()
     {
         _visible = false;
+        _exiting = false;
         _activePresentationId = 0;
         _player = null;
         _itemIcon = null;
@@ -175,7 +239,7 @@ internal sealed class ItemUseDelayTimer
 
     internal void OnDestroy()
     {
-        HideActive();
+        HideImmediately();
         if (_uiRoot)
         {
             UnityEngine.Object.Destroy(_uiRoot);
@@ -213,6 +277,57 @@ internal sealed class ItemUseDelayTimer
         catch
         {
             return null;
+        }
+    }
+
+    private void SetCancelHint()
+    {
+        var shortcut = Configuration.ClearItemAccessDelay.Value;
+        var hasShortcut = shortcut.MainKey != KeyCode.None;
+        _cancelHint!.text = hasShortcut
+            ? $"PRESS {shortcut.ToString().ToUpperInvariant()} TO CANCEL"
+            : string.Empty;
+        _cancelHint.gameObject.SetActive(hasShortcut);
+    }
+
+    private static string GetDelayDetail(Configuration.ItemAccessDelayInfo delayInfo)
+    {
+        if (delayInfo.NestingDelay <= 0f)
+        {
+            return $"BASE ACCESS DELAY  {delayInfo.BaseDelay:0.0}s";
+        }
+
+        var layerLabel = delayInfo.NestingDepth == 1 ? "LAYER" : "LAYERS";
+        return $"BASE {delayInfo.BaseDelay:0.0}s  +  {delayInfo.NestingDelay:0.0}s NESTED  •  {delayInfo.NestingDepth} {layerLabel}";
+    }
+
+    private static string GetSlotName(EquipmentSlot slot) => slot switch
+    {
+        EquipmentSlot.Pockets => "POCKETS",
+        EquipmentSlot.TacticalVest => "TACTICAL VEST",
+        EquipmentSlot.ArmBand => "ARM BAND",
+        EquipmentSlot.Backpack => "BACKPACK",
+        EquipmentSlot.SecuredContainer => "SECURE CONTAINER",
+        _ => slot.ToString().ToUpperInvariant(),
+    };
+
+    private void PlayResultSound(bool completed)
+    {
+        if (!Configuration.TimerSounds.Value || !Singleton<GUISounds>.Instantiated)
+        {
+            return;
+        }
+
+        try
+        {
+            Singleton<GUISounds>.Instance.PlayUISound(
+                completed ? EUISoundType.ButtonBottomBarClick : EUISoundType.MenuEscape);
+        }
+        catch (Exception exception)
+        {
+#if DEBUG
+            _logger?.LogWarning($"Item-use delay timer sound could not be played: {exception.Message}");
+#endif
         }
     }
 
@@ -350,10 +465,13 @@ internal sealed class ItemUseDelayTimer
 
         internal void SetRemaining(float remaining) => _owner?.SetRemaining(_presentationId, remaining);
 
-        public void Dispose()
+        internal void Finish(bool completed)
         {
-            _owner?.End(_presentationId);
+            var owner = _owner;
             _owner = null;
+            owner?.End(_presentationId, completed);
         }
+
+        public void Dispose() => Finish(false);
     }
 }

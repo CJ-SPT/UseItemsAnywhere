@@ -17,11 +17,17 @@ internal sealed class QuickUseWheel
 {
     private const string PrefabPath = "assets/mods/useitemsanywhere.assets/ui/quickusewheel.prefab";
     private const float MaximumVisibleSegmentDegrees = 42f;
+    private const float CenterCancelRadius = 104f;
+    private const float EmptyWheelRefreshInterval = 0.15f;
+
+    private static Player? _pendingOpenRequest;
 
     private static readonly Callback<IHandsController> IgnoreHandsResult = _ => { };
-    private static readonly Color NormalSegmentColor = new(0.035f, 0.045f, 0.043f, 0.58f);
-    private static readonly Color SelectedSegmentColor = new(0.34f, 0.29f, 0.18f, 0.82f);
-    private static readonly Color NormalNameColor = new(0.87f, 0.89f, 0.85f, 1f);
+    private static readonly Color NormalSegmentColor = new(0.045f, 0.048f, 0.048f, 0.86f);
+    private static readonly Color SelectedSegmentColor = new(0.22f, 0.25f, 0.26f, 0.96f);
+    private static readonly Color UnavailableSegmentColor = new(0.13f, 0.055f, 0.045f, 0.9f);
+    private static readonly Color NormalNameColor = new(0.82f, 0.83f, 0.8f, 1f);
+    private static readonly Color UnavailableNameColor = new(0.43f, 0.44f, 0.42f, 1f);
     private static readonly EquipmentSlot[] SlotPriority =
     [
         EquipmentSlot.FirstPrimaryWeapon,
@@ -53,6 +59,7 @@ internal sealed class QuickUseWheel
     private readonly HashSet<Item> _seenItems = [];
     private readonly Dictionary<Item, EquipmentSlot> _sourceSlots = [];
     private readonly Dictionary<Item, ItemIcon?> _iconCache = [];
+    private readonly HashSet<string> _favoriteTemplateIds = new(StringComparer.Ordinal);
 
     private AssetBundle? _bundle;
     private GameObject? _uiRoot;
@@ -81,7 +88,11 @@ internal sealed class QuickUseWheel
     private int _pageItemCount;
     private int _selectedIndex = -1;
     private int _presentedSelectedIndex = int.MinValue;
+    private float _nextEmptyWheelRefreshTime;
     private Player? _player;
+    private Item? _pendingItemOnOpen;
+    private bool _pendingHighlightActive;
+    private bool _openedFromPendingRequest;
     private Player? _iconCachePlayer;
     private GamePlayerOwner? _playerOwner;
     private bool _previousBlockFirearms;
@@ -90,6 +101,11 @@ internal sealed class QuickUseWheel
     private CursorLockMode _previousCursorLockMode;
 
     internal static bool InputBlocked { get; private set; }
+
+    internal static void RequestPendingOpen(Player player)
+    {
+        _pendingOpenRequest = player;
+    }
 
     internal void Initialize(string pluginDirectory, ManualLogSource logger, Transform persistentParent)
     {
@@ -120,6 +136,7 @@ internal sealed class QuickUseWheel
         _uiRoot = UnityEngine.Object.Instantiate(prefab, persistentParent, false);
         _uiRoot.name = "UseItemsAnywhere_QuickUseWheel";
         _uiRoot.SetActive(false);
+        LoadFavorites();
 
         try
         {
@@ -149,8 +166,22 @@ internal sealed class QuickUseWheel
     {
         if (!Configuration.EnableQuickUseWheel.Value || !Application.isFocused)
         {
+            _pendingOpenRequest = null;
             Close(false);
             return;
+        }
+
+        if (_pendingOpenRequest is not null)
+        {
+            var requestedPlayer = _pendingOpenRequest;
+            _pendingOpenRequest = null;
+            if (!_isOpen
+                && Configuration.PendingItemUseBehavior.Value == Configuration.PendingUseMode.OpenWheel
+                && TryGetLocalPlayer(out var localPlayer, out _)
+                && ReferenceEquals(localPlayer, requestedPlayer))
+            {
+                Open(true);
+            }
         }
 
         var shortcut = Configuration.QuickUseWheelKey.Value;
@@ -166,8 +197,11 @@ internal sealed class QuickUseWheel
                 _inputDetectionLogged = true;
             }
 #endif
-           
-            Open();
+
+            if (!_isOpen)
+            {
+                Open();
+            }
         }
 
         if (_isOpen)
@@ -178,7 +212,12 @@ internal sealed class QuickUseWheel
                 return;
             }
 
+            RefreshUnavailableWheel();
             UpdateSelection();
+            if (Input.GetMouseButtonDown(2))
+            {
+                ToggleSelectedFavorite();
+            }
             UpdatePresentation();
             ShowCursor();
 
@@ -189,9 +228,18 @@ internal sealed class QuickUseWheel
                 return;
             }
 
+
+            if (_openedFromPendingRequest && Input.GetMouseButtonDown(0))
+            {
+                var useSelection = _selectedIndex >= 0 && GetSelectedItem()?.IsUsable == true;
+                Close(useSelection);
+                return;
+            }
+
             var scroll = Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) > 0.01f && PageCount > 1)
             {
+                _pendingHighlightActive = false;
                 _page = Mod(_page + (scroll < 0f ? 1 : -1), PageCount);
                 RefreshWheel();
             }
@@ -199,7 +247,10 @@ internal sealed class QuickUseWheel
 
         if (_shortcutHeld && !shortcut.IsPressed())
         {
-            var useSelection = _isOpen && !_cancelled && _selectedIndex >= 0;
+            var useSelection = _isOpen
+                && !_cancelled
+                && _selectedIndex >= 0
+                && GetSelectedItem()?.IsUsable == true;
             Close(useSelection);
         }
     }
@@ -217,6 +268,7 @@ internal sealed class QuickUseWheel
         _bundle = null;
         _iconCache.Clear();
         _iconCachePlayer = null;
+        _pendingOpenRequest = null;
         DestroyRuntimeFont();
     }
 
@@ -224,7 +276,7 @@ internal sealed class QuickUseWheel
 
     private int PageCount => Mathf.Max(1, Mathf.CeilToInt((float)_items.Count / ItemsPerPage));
 
-    private void Open()
+    private void Open(bool openedFromPendingRequest = false)
     {
         if (!_uiRoot)
         {
@@ -255,7 +307,8 @@ internal sealed class QuickUseWheel
             return;
         }
         
-        if (ItemAccessDelayPatch.HasPendingItemAccess(player))
+        var hasPendingAccess = ItemAccessDelayPatch.TryGetPendingItem(player, out var pendingItem);
+        if (hasPendingAccess && Configuration.PendingItemUseBehavior.Value != Configuration.PendingUseMode.OpenWheel)
         {
 #if DEBUG
             _logger?.LogDebug("Quick-use wheel was suppressed while an item-access delay is pending.");
@@ -265,18 +318,26 @@ internal sealed class QuickUseWheel
 
         _player = player;
         _playerOwner = playerOwner;
+        _pendingItemOnOpen = hasPendingAccess ? pendingItem : null;
+        _openedFromPendingRequest = openedFromPendingRequest && hasPendingAccess;
         _items.Clear();
         PopulateUsableItems(player);
 #if DEBUG
         _logger?.LogDebug($"Opening quick-use wheel with {_items.Count} usable item(s).");
 #endif
         _selectionVector = Vector2.zero;
-        _selectedIndex = -1;
-        _page = 0;
+        var pendingIndex = _pendingItemOnOpen is null
+            ? -1
+            : _items.FindIndex(wheelItem => ReferenceEquals(wheelItem.Item, _pendingItemOnOpen));
+        _pendingHighlightActive = pendingIndex >= 0;
+        _selectedIndex = _pendingHighlightActive ? pendingIndex % ItemsPerPage : -1;
+        _page = _pendingHighlightActive ? pendingIndex / ItemsPerPage : 0;
         _pageStartIndex = 0;
         _pageItemCount = 0;
+        _nextEmptyWheelRefreshTime = Time.unscaledTime + EmptyWheelRefreshInterval;
         _cancelled = false;
         _isOpen = true;
+        InputBlocked = true;
 
         _previousBlockFirearms = player.MovementContext.BlockFirearms;
         _previousRotationAction = player.MovementContext.RotationAction;
@@ -293,6 +354,39 @@ internal sealed class QuickUseWheel
         RefreshWheel();
     }
 
+    private void RefreshUnavailableWheel()
+    {
+        if (_items.Exists(static item => item.IsUsable)
+            || _player is null
+            || !_player
+            || Time.unscaledTime < _nextEmptyWheelRefreshTime)
+        {
+            return;
+        }
+
+        _nextEmptyWheelRefreshTime = Time.unscaledTime + EmptyWheelRefreshInterval;
+        _items.Clear();
+        PopulateUsableItems(_player);
+        if (!_items.Exists(static item => item.IsUsable))
+        {
+            RefreshWheel();
+            return;
+        }
+
+#if DEBUG
+        _logger?.LogDebug("Quick-use wheel recovered an available item after a transient refresh.");
+#endif
+        _selectionVector = Vector2.zero;
+        var pendingIndex = _pendingItemOnOpen is null
+            ? -1
+            : _items.FindIndex(wheelItem => ReferenceEquals(wheelItem.Item, _pendingItemOnOpen));
+        _pendingHighlightActive = pendingIndex >= 0;
+        _selectedIndex = _pendingHighlightActive ? pendingIndex % ItemsPerPage : -1;
+        _page = _pendingHighlightActive ? pendingIndex / ItemsPerPage : 0;
+        _pageStartIndex = 0;
+        RefreshWheel();
+    }
+
     private void Close(bool useSelection)
     {
         if (!_isOpen)
@@ -304,6 +398,7 @@ internal sealed class QuickUseWheel
 
         var player = _player;
         var selectedItem = useSelection ? GetSelectedItem()?.Item : null;
+        var pendingItem = _pendingItemOnOpen;
 
         RestoreInput();
         _shortcutHeld = false;
@@ -314,13 +409,27 @@ internal sealed class QuickUseWheel
         _items.Clear();
         _player = null;
         _playerOwner = null;
+        _pendingItemOnOpen = null;
+        _pendingHighlightActive = false;
+        _openedFromPendingRequest = false;
         _uiRoot?.SetActive(false);
         Cursor.visible = _previousCursorVisible;
         Cursor.lockState = _previousCursorLockMode;
 
         if (player is not null && player && selectedItem != null && IsItemStillUsable(player, selectedItem))
         {
-            player.SetItemInHands(selectedItem, IgnoreHandsResult);
+            if (pendingItem is not null && !ReferenceEquals(pendingItem, selectedItem))
+            {
+                ItemAccessDelayPatch.ReplacePendingItemAccess(
+                    player,
+                    selectedItem,
+                    IgnoreHandsResult,
+                    false);
+            }
+            else if (pendingItem is null)
+            {
+                player.SetItemInHands(selectedItem, IgnoreHandsResult);
+            }
         }
     }
 
@@ -347,7 +456,9 @@ internal sealed class QuickUseWheel
             view.ItemRoot.gameObject.SetActive(false);
             view.Icon.sprite = null;
             view.Name.text = string.Empty;
+            view.State.text = string.Empty;
             view.Source.text = string.Empty;
+            view.FavoriteBadge.gameObject.SetActive(false);
         }
 
         if (_pageItemCount == 0)
@@ -377,15 +488,22 @@ internal sealed class QuickUseWheel
             var angle = index * slice * Mathf.Deg2Rad;
             view.ItemRoot.gameObject.SetActive(true);
             view.ItemRoot.anchoredPosition = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle)) * labelRadius;
-            view.ItemRoot.sizeDelta = new Vector2(labelWidth, 116f);
+            view.ItemRoot.sizeDelta = new Vector2(labelWidth, 140f);
             view.Name.rectTransform.sizeDelta = new Vector2(labelWidth, 28f);
+            view.State.rectTransform.sizeDelta = new Vector2(labelWidth, 20f);
             view.Source.rectTransform.sizeDelta = new Vector2(labelWidth, 22f);
             view.Icon.sprite = wheelItem.Icon?.Sprite;
             // Implicit conversion to bool, I know, it looks weird, comparing to null is more expensive
             view.Icon.enabled = view.Icon.sprite;
+            view.Icon.color = wheelItem.IsUsable ? Color.white : UnavailableNameColor;
             view.Name.text = wheelItem.DisplayName;
+            view.State.text = wheelItem.State;
+            view.State.gameObject.SetActive(
+                Configuration.QuickUseShowItemState.Value
+                && !string.IsNullOrEmpty(wheelItem.State));
             view.Source.text = wheelItem.SourceName;
             view.Source.gameObject.SetActive(Configuration.QuickUseShowSourceSlot.Value);
+            view.FavoriteBadge.gameObject.SetActive(wheelItem.IsFavorite);
         }
 
         _cancelHint!.text = "CENTER TO CANCEL";
@@ -409,18 +527,18 @@ internal sealed class QuickUseWheel
         {
             var selected = index == _selectedIndex;
             var view = _views[index];
-            if (view.IsSelected != selected)
-            {
-                view.IsSelected = selected;
-                view.Segment.color = selected ? SelectedSegmentColor : NormalSegmentColor;
-                view.Name.color = selected ? Color.white : NormalNameColor;
-            }
+            var wheelItem = GetPageItem(index);
+            view.IsSelected = selected;
+            view.Segment.color = !wheelItem.IsUsable
+                ? UnavailableSegmentColor
+                : selected ? SelectedSegmentColor : NormalSegmentColor;
+            view.Name.color = !wheelItem.IsUsable
+                ? UnavailableNameColor
+                : selected ? Color.white : NormalNameColor;
             view.ItemRoot.localScale = Vector3.Lerp(
                 view.ItemRoot.localScale,
                 selected ? Vector3.one * 1.08f : Vector3.one,
                 Time.unscaledDeltaTime * 20f);
-
-            var wheelItem = GetPageItem(index);
             if (!view.Icon.sprite && wheelItem.Icon?.Sprite)
             {
                 view.Icon.sprite = wheelItem.Icon!.Sprite;
@@ -431,12 +549,24 @@ internal sealed class QuickUseWheel
         if (_presentedSelectedIndex != _selectedIndex)
         {
             _presentedSelectedIndex = _selectedIndex;
-            _selectedName!.text = _selectedIndex >= 0 && _selectedIndex < _pageItemCount
-                ? GetPageItem(_selectedIndex).FullName
-                : "CANCEL";
-            _centerBorder!.color = _selectedIndex >= 0
-                ? new Color(0.58f, 0.43f, 0.22f, 0.78f)
-                : new Color(0.16f, 0.19f, 0.18f, 0.62f);
+            var selectedItem = GetSelectedItem();
+            _selectedName!.text = selectedItem?.FullName ?? "CANCEL";
+            _cancelHint!.text = _openedFromPendingRequest
+                ? selectedItem.HasValue
+                    ? ReferenceEquals(selectedItem.Value.Item, _pendingItemOnOpen)
+                        ? "CURRENTLY PENDING  •  LMB: KEEP"
+                        : selectedItem.Value.IsUsable ? "LMB: REPLACE" : "ITEM UNAVAILABLE"
+                    : "LMB: CLOSE"
+                : selectedItem is { IsUsable: false }
+                ? "ITEM UNAVAILABLE"
+                : selectedItem.HasValue
+                    ? selectedItem.Value.IsFavorite ? "MMB: UNFAVORITE" : "MMB: FAVORITE"
+                    : "CENTER TO CANCEL";
+            _centerBorder!.color = selectedItem is { IsUsable: false }
+                ? UnavailableSegmentColor
+                : selectedItem.HasValue
+                    ? new Color(0.58f, 0.61f, 0.61f, 0.96f)
+                    : new Color(0.34f, 0.36f, 0.36f, 0.96f);
         }
     }
 
@@ -453,14 +583,64 @@ internal sealed class QuickUseWheel
                 itemRoot,
                 RequireComponent<Image>(itemRoot, "Icon"),
                 RequireComponent<TMP_Text>(itemRoot, "Name"),
-                RequireComponent<TMP_Text>(itemRoot, "Source")));
+                RequireComponent<TMP_Text>(itemRoot, "State"),
+                RequireComponent<TMP_Text>(itemRoot, "Source"),
+                RequireComponent<RectTransform>(itemRoot, "FavoriteBadge")));
         }
+    }
+
+    private void LoadFavorites()
+    {
+        _favoriteTemplateIds.Clear();
+        foreach (var templateId in Configuration.QuickUseFavoriteTemplateIds.Value.Split(','))
+        {
+            var normalized = templateId.Trim();
+            if (!string.IsNullOrEmpty(normalized))
+            {
+                _favoriteTemplateIds.Add(normalized);
+            }
+        }
+    }
+
+    private void ToggleSelectedFavorite()
+    {
+        var selectedItem = GetSelectedItem();
+        if (!selectedItem.HasValue)
+        {
+            return;
+        }
+
+        var templateId = selectedItem.Value.Item.TemplateId.ToString();
+        var isFavorite = !_favoriteTemplateIds.Remove(templateId);
+        if (isFavorite)
+        {
+            _favoriteTemplateIds.Add(templateId);
+        }
+
+        Configuration.QuickUseFavoriteTemplateIds.Value = string.Join(",", _favoriteTemplateIds);
+        for (var index = 0; index < _items.Count; index++)
+        {
+            if (string.Equals(_items[index].Item.TemplateId.ToString(), templateId, StringComparison.Ordinal))
+            {
+                _items[index] = _items[index].WithFavorite(isFavorite);
+            }
+        }
+
+        _presentedSelectedIndex = int.MinValue;
+        RefreshWheel();
     }
 
     private void UpdateSelection()
     {
-        var screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-        _selectionVector = (Vector2)Input.mousePosition - screenCenter;
+        if (_wheelRoot is null
+            || !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                _wheelRoot,
+                Input.mousePosition,
+                null,
+                out _selectionVector))
+        {
+            _selectionVector = Vector2.zero;
+        }
         UpdateSelectedIndex();
     }
 
@@ -473,11 +653,22 @@ internal sealed class QuickUseWheel
     private void UpdateSelectedIndex()
     {
         var count = _pageItemCount;
-        if (count == 0 || _selectionVector.magnitude < 24f)
+        if (count == 0)
         {
             _selectedIndex = -1;
             return;
         }
+
+        if (_selectionVector.magnitude <= CenterCancelRadius)
+        {
+            if (!_pendingHighlightActive)
+            {
+                _selectedIndex = -1;
+            }
+            return;
+        }
+
+        _pendingHighlightActive = false;
 
         var degrees = Mathf.Atan2(_selectionVector.x, _selectionVector.y) * Mathf.Rad2Deg;
         if (degrees < 0f)
@@ -615,19 +806,26 @@ internal sealed class QuickUseWheel
         
         foreach (var item in _candidateItems)
         {
-            if (!controller.Examined(item)
-                || !controller.IsAtReachablePlace(item)
-                || !item.CheckAction(null).Succeeded
-                || !HasResource(item))
+            if (!controller.Examined(item))
             {
                 continue;
             }
 
+            var hasResource = HasResource(item);
+            var isUsable = hasResource
+                && controller.IsAtReachablePlace(item)
+                && item.CheckAction(null).Succeeded;
+            var state = !hasResource
+                ? "EMPTY"
+                : !isUsable ? "UNAVAILABLE" : GetItemState(item);
             var sourceSlot = _sourceSlots.GetValueOrDefault(item, EquipmentSlot.Pockets);
             _items.Add(new WheelItem(
                 item,
                 GetDisplayName(item),
                 GetFullName(item),
+                state,
+                isUsable,
+                _favoriteTemplateIds.Contains(item.TemplateId.ToString()),
                 sourceSlot,
                 GetOrLoadIcon(item)));
         }
@@ -640,7 +838,13 @@ internal sealed class QuickUseWheel
 
     private static int CompareWheelItems(WheelItem left, WheelItem right)
     {
-        var comparison = Array.IndexOf(SlotPriority, left.SourceSlot)
+        var comparison = (left.IsFavorite ? 0 : 1).CompareTo(right.IsFavorite ? 0 : 1);
+        if (comparison != 0)
+        {
+            return comparison;
+        }
+
+        comparison = Array.IndexOf(SlotPriority, left.SourceSlot)
             .CompareTo(Array.IndexOf(SlotPriority, right.SourceSlot));
         if (comparison != 0)
         {
@@ -695,6 +899,63 @@ internal sealed class QuickUseWheel
         }
         var resource = item.GetItemComponent<ResourceComponent>();
         return resource == null || resource.Value > 0f;
+    }
+
+    private static string GetItemState(Item item)
+    {
+        if (item is Weapon weapon)
+        {
+            var magazineMaximum = weapon.GetMaxMagazineCount();
+            var ammunition = magazineMaximum > 0
+                ? $"{weapon.GetCurrentMagazineCount()}/{magazineMaximum}"
+                : string.Empty;
+            var repairable = weapon.Repairable;
+            var durability = repairable != null && repairable.MaxDurability > 0f
+                ? $"DUR {Mathf.RoundToInt(repairable.Durability / repairable.MaxDurability * 100f)}%"
+                : string.Empty;
+            return JoinItemState(ammunition, durability);
+        }
+
+        if (item is Magazine magazine)
+        {
+            return $"{magazine.Count}/{magazine.MaxCount} RDS";
+        }
+
+        var medKit = item.GetItemComponent<MedKitComponent>();
+        if (medKit != null)
+        {
+            return $"{Mathf.CeilToInt(medKit.HpResource)}/{medKit.MaxHpResource} HP";
+        }
+
+        var foodDrink = item.GetItemComponent<FoodDrinkComponent>();
+        if (foodDrink != null)
+        {
+            return FormatResource(foodDrink.HpPercent, foodDrink.MaxResource);
+        }
+
+        var resource = item.GetItemComponent<ResourceComponent>();
+        if (resource != null)
+        {
+            return FormatResource(resource.Value, resource.MaxResource);
+        }
+
+        return item.StackMaxSize > 1 ? $"×{item.StackObjectsCount}" : string.Empty;
+    }
+
+    private static string FormatResource(float current, float maximum)
+    {
+        return maximum > 0f
+            ? $"{Mathf.CeilToInt(current)}/{Mathf.CeilToInt(maximum)}"
+            : Mathf.CeilToInt(current).ToString();
+    }
+
+    private static string JoinItemState(string first, string second)
+    {
+        if (string.IsNullOrEmpty(first))
+        {
+            return second;
+        }
+        return string.IsNullOrEmpty(second) ? first : $"{first} • {second}";
     }
 
     private static string GetDisplayName(Item item)
@@ -894,13 +1155,17 @@ internal sealed class QuickUseWheel
         RectTransform itemRoot,
         Image icon,
         TMP_Text name,
-        TMP_Text source)
+        TMP_Text state,
+        TMP_Text source,
+        RectTransform favoriteBadge)
     {
         internal Image Segment { get; } = segment;
         internal RectTransform ItemRoot { get; } = itemRoot;
         internal Image Icon { get; } = icon;
         internal TMP_Text Name { get; } = name;
+        internal TMP_Text State { get; } = state;
         internal TMP_Text Source { get; } = source;
+        internal RectTransform FavoriteBadge { get; } = favoriteBadge;
         internal bool? IsSelected { get; set; }
     }
 
@@ -908,14 +1173,30 @@ internal sealed class QuickUseWheel
         Item item,
         string displayName,
         string fullName,
+        string state,
+        bool isUsable,
+        bool isFavorite,
         EquipmentSlot sourceSlot,
         ItemIcon? icon)
     {
         internal Item Item { get; } = item;
         internal string DisplayName { get; } = displayName;
         internal string FullName { get; } = fullName;
+        internal string State { get; } = state;
+        internal bool IsUsable { get; } = isUsable;
+        internal bool IsFavorite { get; } = isFavorite;
         internal EquipmentSlot SourceSlot { get; } = sourceSlot;
         internal ItemIcon? Icon { get; } = icon;
         internal string SourceName { get; } = GetSlotName(sourceSlot);
+
+        internal WheelItem WithFavorite(bool value) => new(
+            Item,
+            DisplayName,
+            FullName,
+            State,
+            IsUsable,
+            value,
+            SourceSlot,
+            Icon);
     }
 }

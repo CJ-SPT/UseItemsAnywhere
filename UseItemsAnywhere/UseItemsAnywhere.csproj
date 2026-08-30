@@ -1,8 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <Description>Use items from anywhere in the inventory</Description>
-    <Version>2.1.0</Version>
+    <Title>R.A.T. - Radial Access Toolkit</Title>
+    <Product>R.A.T. - Radial Access Toolkit</Product>
+    <Description>Radial selection, favorites, and expanded access for equipment throughout your loadout.</Description>
+    <Copyright>Copyright © 2026 CJ-SPT</Copyright>
+    <PackageLicenseExpression>CC-BY-NC-ND-4.0</PackageLicenseExpression>
+    <Version>2.1.1</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
@@ -116,6 +120,7 @@
   <ItemGroup>
     <BundleFile Include="$(ProjectDir)Resources\quickusewheel" />
     <BundleFile Include="$(ProjectDir)Resources\itemusedelaytimer" />
+    <LicenseFile Include="$(SolutionDir)LICENSE" />
   </ItemGroup>
 
   <!-- Gets the commit hash from git -->
@@ -143,20 +148,28 @@
       SourceFiles="@(BundleFile);"
       DestinationFolder="$(TarkovDir)BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
     />
+    <Copy
+      SourceFiles="@(LicenseFile);"
+      DestinationFolder="$(TarkovDir)BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
+    />
 
     <!-- Creates a release zip file -->
     <RemoveDir Directories="$(ProjectDir)release" />
     <Copy
       SourceFiles="@(OutputDLL);"
-      DestinationFolder="$(ProjectDir)release\UseItemsAnywhere\BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
+      DestinationFolder="$(ProjectDir)release\RAT\BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
     />
     <Copy
       SourceFiles="@(BundleFile);"
-      DestinationFolder="$(ProjectDir)release\UseItemsAnywhere\BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
+      DestinationFolder="$(ProjectDir)release\RAT\BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
+    />
+    <Copy
+      SourceFiles="@(LicenseFile);"
+      DestinationFolder="$(ProjectDir)release\RAT\BepInEx\plugins\UseItemsAnywhere\%(RecursiveDir)"
     />
     <ZipDirectory
-      SourceDirectory="$(ProjectDir)release\UseItemsAnywhere\"
-      DestinationFile="$(ProjectDir)release\UseItemsAnywhere-$(ConfigurationName)-$(Version)-$(SourceRevisionId).zip"
+      SourceDirectory="$(ProjectDir)release\RAT\"
+      DestinationFile="$(ProjectDir)release\RAT-$(ConfigurationName)-$(Version)-$(SourceRevisionId).zip"
     />
   </Target>
 </Project>
