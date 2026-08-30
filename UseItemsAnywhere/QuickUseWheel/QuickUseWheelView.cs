@@ -75,7 +75,7 @@ internal sealed class QuickUseWheelView
             _selectedName!.text = "NO ITEMS\nAVAILABLE";
             _cancelHint!.text = "CHECK YOUR LOADOUT";
             _centerBorder!.color = new Color(0.34f, 0.36f, 0.36f, 0.96f);
-            _pageHint!.gameObject.SetActive(false);
+            UpdateModeStatus(page, pageCount);
             _controls!.text = "RELEASE / ESC / RIGHT CLICK TO CLOSE";
             _presentedSelectedIndex = -1;
             return;
@@ -117,6 +117,7 @@ internal sealed class QuickUseWheelView
                 : new Color(0.72f, 0.74f, 0.72f, 1f);
             view.State.gameObject.SetActive(
                 wheelItem.IsQueued
+                || wheelItem.IsGrouped
                 || Configuration.QuickUseShowItemState.Value
                 && !string.IsNullOrEmpty(wheelItem.State));
             view.Source.text = wheelItem.SourceName;
@@ -128,8 +129,7 @@ internal sealed class QuickUseWheelView
         }
 
         _cancelHint!.text = "CENTER TO CANCEL";
-        _pageHint!.gameObject.SetActive(pageCount > 1);
-        _pageHint.text = pageCount > 1 ? $"PAGE {page + 1} / {pageCount}   •   MOUSE WHEEL" : string.Empty;
+        UpdateModeStatus(page, pageCount);
         _controls!.text = openedFromPendingRequest
             ? "LMB CONFIRM   •   MMB FAVORITE   •   ESC / RIGHT CLICK TO CLOSE"
             : "RELEASE TO USE   •   MMB FAVORITE   •   ESC / RIGHT CLICK TO CANCEL";
@@ -213,7 +213,34 @@ internal sealed class QuickUseWheelView
         _selectedName = document.Require<TMP_Text>("WheelRoot/Center/SelectedName");
         _cancelHint = document.Require<TMP_Text>("WheelRoot/Center/CancelHint");
         _pageHint = document.Require<TMP_Text>("PageHint");
+        _pageHint.rectTransform.sizeDelta = new Vector2(760f, 30f);
         _controls = document.Require<TMP_Text>("Controls");
+    }
+
+    private void UpdateModeStatus(int page, int pageCount)
+    {
+        var pendingMode = Configuration.PendingItemUseBehavior.Value switch
+        {
+            Configuration.PendingUseMode.Ignore => "IGNORE",
+            Configuration.PendingUseMode.CancelAndReplace => "REPLACE",
+            Configuration.PendingUseMode.QueueOne => "QUEUE ONE",
+            Configuration.PendingUseMode.OpenWheel => "OPEN WHEEL",
+            _ => "UNKNOWN",
+        };
+        var groupingMode = !Configuration.QuickUseGroupIdenticalItems.Value
+            ? "OFF"
+            : Configuration.QuickUseGroupedItemSelection.Value switch
+            {
+                Configuration.GroupedItemSelectionMode.LowestResourceFirst => "LOWEST RESOURCE",
+                Configuration.GroupedItemSelectionMode.HighestResourceFirst => "HIGHEST RESOURCE",
+                Configuration.GroupedItemSelectionMode.FastestAccessFirst => "FASTEST ACCESS",
+                _ => "UNKNOWN",
+            };
+        var pageStatus = pageCount > 1
+            ? $"PAGE {page + 1} / {pageCount}   •   MOUSE WHEEL     "
+            : string.Empty;
+        _pageHint!.text = $"{pageStatus}PENDING: {pendingMode}   •   GROUP: {groupingMode}";
+        _pageHint.gameObject.SetActive(true);
     }
 
     private void ClearViews()

@@ -40,6 +40,7 @@ internal sealed class QuickUseWheelInventory
     private readonly List<Item> _candidateItems = [];
     private readonly HashSet<Item> _seenItems = [];
     private readonly Dictionary<Item, EquipmentSlot> _sourceSlots = [];
+    private readonly Dictionary<string, List<Item>> _groupedCandidates = new(StringComparer.Ordinal);
     private readonly HashSet<string> _favoriteTemplateIds = new(StringComparer.Ordinal);
     private RuntimeUiService _ui = null!;
 
@@ -76,6 +77,7 @@ internal sealed class QuickUseWheelInventory
         _candidateItems.Clear();
         _seenItems.Clear();
         _sourceSlots.Clear();
+        _groupedCandidates.Clear();
 
         for (var slotIndex = 0; slotIndex < SlotPriority.Length; slotIndex++)
         {
@@ -164,35 +166,31 @@ internal sealed class QuickUseWheelInventory
                 continue;
             }
 
-            var isQueued = ItemAccessDelayPatch.IsQueuedForAccess(player, item);
-            var hasResource = HasResource(item);
-            var isUsable = !isQueued
-                && hasResource
-                && controller.IsAtReachablePlace(item)
-                && item.CheckAction(null).Succeeded;
-            var state = isQueued
-                ? "QUEUED"
-                : !hasResource
-                    ? "EMPTY"
-                    : !isUsable ? "UNAVAILABLE" : GetItemState(item);
-            var sourceSlot = _sourceSlots.GetValueOrDefault(item, EquipmentSlot.Pockets);
-            _items.Add(new QuickUseWheelItem(
-                item,
-                _ui.GetItemDisplayName(item, 18),
-                _ui.GetItemName(item),
-                state,
-                isUsable,
-                isQueued,
-                _favoriteTemplateIds.Contains(item.TemplateId.ToString()),
-                sourceSlot,
-                RuntimeUiService.GetSlotName(sourceSlot),
-                _ui.GetItemIcon(item)));
+            if (Configuration.QuickUseGroupIdenticalItems.Value && IsGroupable(item))
+            {
+                var templateId = item.TemplateId.ToString();
+                if (!_groupedCandidates.TryGetValue(templateId, out var group))
+                {
+                    group = [];
+                    _groupedCandidates.Add(templateId, group);
+                }
+                group.Add(item);
+                continue;
+            }
+
+            AddWheelItem(player, [item]);
+        }
+
+        foreach (var group in _groupedCandidates.Values)
+        {
+            AddWheelItem(player, group);
         }
 
         _items.Sort(CompareWheelItems);
         _candidateItems.Clear();
         _seenItems.Clear();
         _sourceSlots.Clear();
+        _groupedCandidates.Clear();
     }
 
     internal void ClearItems()
@@ -206,6 +204,7 @@ internal sealed class QuickUseWheelInventory
         _candidateItems.Clear();
         _seenItems.Clear();
         _sourceSlots.Clear();
+        _groupedCandidates.Clear();
     }
 
     internal void ToggleFavorite(QuickUseWheelItem selectedItem)
@@ -235,6 +234,149 @@ internal sealed class QuickUseWheelInventory
             && player.InventoryController.IsAtReachablePlace(item)
             && item.CheckAction(null).Succeeded
             && HasResource(item);
+    }
+
+    internal static Item? ResolveItemForUse(Player player, QuickUseWheelItem wheelItem)
+    {
+        Item? selectedItem = null;
+        foreach (var item in wheelItem.GroupedItems)
+        {
+            if (!IsItemStillUsable(player, item))
+            {
+                continue;
+            }
+
+            if (selectedItem is null || ComparePreferredItems(player, item, selectedItem) < 0)
+            {
+                selectedItem = item;
+            }
+        }
+        return selectedItem;
+    }
+
+    private void AddWheelItem(Player player, IReadOnlyList<Item> groupedItems)
+    {
+        var item = SelectRepresentativeItem(player, groupedItems);
+        var isQueued = ItemAccessDelayPatch.IsQueuedForAccess(player, item);
+        var hasResource = HasResource(item);
+        var isUsable = !isQueued
+            && hasResource
+            && player.InventoryController.IsAtReachablePlace(item)
+            && item.CheckAction(null).Succeeded;
+        var quantity = GetCombinedQuantity(groupedItems);
+        var state = isQueued
+            ? "QUEUED"
+            : !hasResource
+                ? "EMPTY"
+                : !isUsable ? "UNAVAILABLE" : GetItemState(item, groupedItems.Count == 1);
+        if (groupedItems.Count > 1)
+        {
+            state = JoinItemState($"×{quantity}", state);
+        }
+
+        var sourceSlot = _sourceSlots.GetValueOrDefault(item, EquipmentSlot.Pockets);
+        _items.Add(new QuickUseWheelItem(
+            item,
+            [..groupedItems],
+            quantity,
+            _ui.GetItemDisplayName(item, 18),
+            _ui.GetItemName(item),
+            state,
+            isUsable,
+            isQueued,
+            _favoriteTemplateIds.Contains(item.TemplateId.ToString()),
+            sourceSlot,
+            RuntimeUiService.GetSlotName(sourceSlot),
+            _ui.GetItemIcon(item)));
+    }
+
+    private Item SelectRepresentativeItem(Player player, IReadOnlyList<Item> groupedItems)
+    {
+        var selectedItem = groupedItems[0];
+        for (var index = 1; index < groupedItems.Count; index++)
+        {
+            var candidate = groupedItems[index];
+            var candidateRank = GetAvailabilityRank(player, candidate);
+            var selectedRank = GetAvailabilityRank(player, selectedItem);
+            if (candidateRank != selectedRank
+                ? candidateRank < selectedRank
+                : ComparePreferredItems(player, candidate, selectedItem) < 0)
+            {
+                selectedItem = candidate;
+            }
+        }
+        return selectedItem;
+    }
+
+    private static int GetAvailabilityRank(Player player, Item item)
+    {
+        if (ItemAccessDelayPatch.IsQueuedForAccess(player, item))
+        {
+            return 1;
+        }
+        if (!HasResource(item))
+        {
+            return 3;
+        }
+        return player.InventoryController.IsAtReachablePlace(item)
+            && item.CheckAction(null).Succeeded
+                ? 0
+                : 2;
+    }
+
+    private static int ComparePreferredItems(Player player, Item left, Item right)
+    {
+        var comparison = Configuration.QuickUseGroupedItemSelection.Value switch
+        {
+            Configuration.GroupedItemSelectionMode.LowestResourceFirst =>
+                GetResourceValue(left).CompareTo(GetResourceValue(right)),
+            Configuration.GroupedItemSelectionMode.HighestResourceFirst =>
+                GetResourceValue(right).CompareTo(GetResourceValue(left)),
+            Configuration.GroupedItemSelectionMode.FastestAccessFirst =>
+                GetAccessDelay(player, left).CompareTo(GetAccessDelay(player, right)),
+            _ => 0,
+        };
+        return comparison != 0 ? comparison : string.CompareOrdinal(left.Id, right.Id);
+    }
+
+    private static float GetAccessDelay(Player player, Item item)
+    {
+        return Configuration.EnableSlotDelays.Value
+            && Configuration.TryGetItemAccessDelay(player.InventoryController.Inventory, item, out var delayInfo)
+                ? delayInfo.TotalDelay
+                : 0f;
+    }
+
+    private static float GetResourceValue(Item item)
+    {
+        var medKit = item.GetItemComponent<MedKitComponent>();
+        if (medKit != null)
+        {
+            return medKit.HpResource;
+        }
+        var foodDrink = item.GetItemComponent<FoodDrinkComponent>();
+        if (foodDrink != null)
+        {
+            return foodDrink.HpPercent;
+        }
+        var resource = item.GetItemComponent<ResourceComponent>();
+        return resource?.Value ?? item.StackObjectsCount;
+    }
+
+    private static int GetCombinedQuantity(IReadOnlyList<Item> groupedItems)
+    {
+        var quantity = 0;
+        foreach (var item in groupedItems)
+        {
+            quantity += Math.Max(1, item.StackObjectsCount);
+        }
+        return quantity;
+    }
+
+    private static bool IsGroupable(Item item)
+    {
+        return item is Meds or FoodDrink or ThrowWeap
+            || Configuration.FlareIds.Contains(item.TemplateId);
     }
 
     private static int CompareWheelItems(QuickUseWheelItem left, QuickUseWheelItem right)
@@ -292,7 +434,7 @@ internal sealed class QuickUseWheelInventory
         return resource == null || resource.Value > 0f;
     }
 
-    private static string GetItemState(Item item)
+    private static string GetItemState(Item item, bool includeStackQuantity = true)
     {
         if (item is Weapon weapon)
         {
@@ -330,7 +472,7 @@ internal sealed class QuickUseWheelInventory
             return FormatResource(resource.Value, resource.MaxResource);
         }
 
-        return item.StackMaxSize > 1 ? $"×{item.StackObjectsCount}" : string.Empty;
+        return includeStackQuantity && item.StackMaxSize > 1 ? $"×{item.StackObjectsCount}" : string.Empty;
     }
 
     private static string FormatResource(float current, float maximum)

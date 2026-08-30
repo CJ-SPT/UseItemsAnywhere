@@ -19,6 +19,13 @@ public static class Configuration
         OpenWheel,
     }
 
+    public enum GroupedItemSelectionMode
+    {
+        LowestResourceFirst,
+        HighestResourceFirst,
+        FastestAccessFirst,
+    }
+
     public static readonly HashSet<EquipmentSlot> DefaultWeaponSlots =
         [EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster];
     private static ConfigEntry<List<EquipmentSlot>> _weaponSlots = null!; 
@@ -43,6 +50,8 @@ public static class Configuration
     public static ConfigEntry<KeyboardShortcut> QuickUseWheelKey = null!;
     public static ConfigEntry<bool> QuickUseWheelSounds = null!;
     public static ConfigEntry<int> QuickUseItemsPerPage = null!;
+    public static ConfigEntry<bool> QuickUseGroupIdenticalItems = null!;
+    public static ConfigEntry<GroupedItemSelectionMode> QuickUseGroupedItemSelection = null!;
     public static ConfigEntry<bool> QuickUseShowSourceSlot = null!;
     public static ConfigEntry<bool> QuickUseShowItemState = null!;
     internal static ConfigEntry<string> QuickUseFavoriteTemplateIds = null!;
@@ -125,6 +134,24 @@ public static class Configuration
             new ConfigDescription(
                 "Maximum number of items displayed on each wheel page.",
                 new AcceptableValueRange<int>(4, 12),
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseGroupIdenticalItems = configFile.Bind(
+            QuickUseWheel,
+            "Group Identical Items",
+            true,
+            new ConfigDescription(
+                "Groups consumables, grenades, and flares with the same item template into one wheel segment.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseGroupedItemSelection = configFile.Bind(
+            QuickUseWheel,
+            "Grouped Item Selection",
+            GroupedItemSelectionMode.LowestResourceFirst,
+            new ConfigDescription(
+                "Controls which usable item is selected from a group: preserve fuller items, use fuller items first, or use the item with the shortest access delay.",
+                null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
         ConfigEntries.Add(QuickUseShowSourceSlot = configFile.Bind(

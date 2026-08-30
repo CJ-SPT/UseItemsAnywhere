@@ -295,7 +295,12 @@ internal sealed class QuickUseWheelController
         }
 
         var player = _player;
-        var selectedItem = useSelection ? GetSelectedItem()?.Item : null;
+        var selectedWheelItem = useSelection ? GetSelectedItem() : null;
+        var selectedItem = player is not null
+            && player
+            && selectedWheelItem.HasValue
+                ? QuickUseWheelInventory.ResolveItemForUse(player, selectedWheelItem.Value)
+                : null;
         var pendingItem = player is not null
             && player
             && ItemAccessDelayPatch.TryGetPendingItem(player, out var currentPendingItem)
@@ -318,8 +323,7 @@ internal sealed class QuickUseWheelController
 
         if (player is not null
             && player
-            && selectedItem != null
-            && QuickUseWheelInventory.IsItemStillUsable(player, selectedItem))
+            && selectedItem != null)
         {
             UseSelectedItem(player, selectedItem, pendingItem);
         }
