@@ -11,6 +11,14 @@ namespace UseItemsAnywhere;
 
 public static class Configuration
 {
+    public enum PendingUseMode
+    {
+        Ignore,
+        CancelAndReplace,
+        QueueOne,
+        OpenWheel,
+    }
+
     public static readonly HashSet<EquipmentSlot> DefaultWeaponSlots =
         [EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster];
     private static ConfigEntry<List<EquipmentSlot>> _weaponSlots = null!; 
@@ -26,6 +34,8 @@ public static class Configuration
     
     public static ConfigEntry<bool> EnableSlotDelays = null!; 
     public static ConfigEntry<bool> ShowTimerPanel = null!; 
+    public static ConfigEntry<bool> TimerSounds = null!;
+    public static ConfigEntry<PendingUseMode> PendingItemUseBehavior = null!;
     public static ConfigEntry<KeyboardShortcut> ClearItemAccessDelay = null!;
     private static ConfigEntry<float> _additionalContainerNestingDelay = null!;
     
@@ -33,6 +43,8 @@ public static class Configuration
     public static ConfigEntry<KeyboardShortcut> QuickUseWheelKey = null!;
     public static ConfigEntry<int> QuickUseItemsPerPage = null!;
     public static ConfigEntry<bool> QuickUseShowSourceSlot = null!;
+    public static ConfigEntry<bool> QuickUseShowItemState = null!;
+    internal static ConfigEntry<string> QuickUseFavoriteTemplateIds = null!;
     public static ConfigEntry<bool> QuickUseShowPrimAndSecWeapons = null!;
     public static ConfigEntry<bool> QuickUseShowMelee = null!;
     public static ConfigEntry<bool> QuickUseShowMeds = null!;
@@ -184,7 +196,7 @@ public static class Configuration
                 EquipmentSlot.Pockets,
             },
             new ConfigDescription(
-                "Configures which slots can supply grenades.",
+                "Configures which slots can supply melee weapons.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes
                 {
@@ -233,22 +245,6 @@ public static class Configuration
             },
             new ConfigDescription(
                 "Configures which slots can supply magazines/ammo when reloading.",
-                null,
-                new VersionChecker.ConfigurationManagerAttributes
-                {
-                    CustomDrawer = EquipmentSlotListDrawer,
-                })));
-        
-        ConfigEntries.Add(FlareSlots = configFile.Bind(
-            SlotConfigurations,
-            "Flare Slots",
-            new List<EquipmentSlot>
-            {
-                EquipmentSlot.TacticalVest,
-                EquipmentSlot.Pockets,
-            },
-            new ConfigDescription(
-                "Configures which slots can supply flares.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes
                 {
@@ -324,6 +320,45 @@ public static class Configuration
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
+        QuickUseFavoriteTemplateIds = configFile.Bind(
+            QuickUseWheel,
+            "Favorite Item Templates",
+            string.Empty,
+            new ConfigDescription(
+                "Persisted item template identifiers favorited from the quick-use wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes
+                {
+                    Browsable = false,
+                }));
+
+        ConfigEntries.Add(QuickUseShowItemState = configFile.Bind(
+            QuickUseWheel,
+            "Show Item State",
+            true,
+            new ConfigDescription(
+                "Shows remaining resources, ammunition, stack size, or durability beneath each wheel item.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(TimerSounds = configFile.Bind(
+            SlotAccessDelays,
+            "Timer Sounds",
+            true,
+            new ConfigDescription(
+                "Plays subtle interface sounds when an item-access delay completes or is cancelled.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(PendingItemUseBehavior = configFile.Bind(
+            SlotAccessDelays,
+            "Pending Item Use Behavior",
+            PendingUseMode.CancelAndReplace,
+            new ConfigDescription(
+                "Controls item-use attempts made while an access delay is active: ignore them, cancel and use the latest item, queue the first extra item, or open the wheel to choose a replacement.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
         ConfigEntries.Add(ClearItemAccessDelay = configFile.Bind(
             SlotAccessDelays,
             "Clear Item Access Delay",
@@ -349,24 +384,31 @@ public static class Configuration
         BindSlotAccessDelay(configFile, EquipmentSlot.SecuredContainer, "Secured Container", 2f);
     }
     
-    internal static float GetItemAccessDelay(Inventory inventory, Item item)
+    internal static bool TryGetItemAccessDelay(Inventory inventory, Item item, out ItemAccessDelayInfo delayInfo)
     {
         foreach (var (slot, delayConfiguration) in SlotAccessDelayConfigurations)
         {
             if (inventory.GetItemsInSlots([slot]).Contains(item))
             {
-                var nestingDelay = slot == EquipmentSlot.Backpack
-                    ? GetBackpackNestingDelay(inventory, item)
-                    : 0f;
-
-                return delayConfiguration.Value + nestingDelay;
+                var nestingDepth = slot == EquipmentSlot.Backpack
+                    ? GetBackpackNestingDepth(inventory, item)
+                    : 0;
+                var nestingDelay = nestingDepth * _additionalContainerNestingDelay.Value;
+                delayInfo = new ItemAccessDelayInfo(
+                    delayConfiguration.Value + nestingDelay,
+                    slot,
+                    delayConfiguration.Value,
+                    nestingDepth,
+                    nestingDelay);
+                return true;
             }
         }
 
-        return 0f;
+        delayInfo = default;
+        return false;
     }
 
-    private static float GetBackpackNestingDelay(Inventory inventory, Item item)
+    private static int GetBackpackNestingDepth(Inventory inventory, Item item)
     {
         var equippedBackpack = inventory.Equipment
             .GetSlot(EquipmentSlot.Backpack)
@@ -374,7 +416,7 @@ public static class Configuration
 
         if (equippedBackpack == null)
         {
-            return 0f;
+            return 0;
         }
 
         var nestingDepth = 0;
@@ -382,13 +424,36 @@ public static class Configuration
         {
             if (ReferenceEquals(parentItem, equippedBackpack))
             {
-                return nestingDepth * _additionalContainerNestingDelay.Value;
+                return nestingDepth;
             }
 
             nestingDepth++;
         }
 
-        return 0f;
+        return 0;
+    }
+
+    internal readonly struct ItemAccessDelayInfo
+    {
+        internal ItemAccessDelayInfo(
+            float totalDelay,
+            EquipmentSlot sourceSlot,
+            float baseDelay,
+            int nestingDepth,
+            float nestingDelay)
+        {
+            TotalDelay = totalDelay;
+            SourceSlot = sourceSlot;
+            BaseDelay = baseDelay;
+            NestingDepth = nestingDepth;
+            NestingDelay = nestingDelay;
+        }
+
+        internal float TotalDelay { get; }
+        internal EquipmentSlot SourceSlot { get; }
+        internal float BaseDelay { get; }
+        internal int NestingDepth { get; }
+        internal float NestingDelay { get; }
     }
 
     private static void BindSlotAccessDelay(
