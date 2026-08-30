@@ -7,6 +7,8 @@ using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
 using UnityEngine;
+using UseItemsAnywhere.ItemUseDelayTimer;
+using UseItemsAnywhere.QuickUseWheel;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -157,7 +159,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                 case Configuration.PendingUseMode.Ignore:
                     break;
                 case Configuration.PendingUseMode.OpenWheel:
-                    QuickUseWheel.RequestPendingOpen(__instance);
+                    QuickUseWheelController.RequestPendingOpen(__instance);
                     break;
                 default:
                     break;
@@ -217,7 +219,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         Configuration.ItemAccessDelayInfo delayInfo,
         PendingAccess pendingAccess)
     {
-        ItemUseDelayTimer.Presentation? presentation = null;
+        ItemUseDelayPresentation? presentation = null;
         var completed = false;
         try
         {
