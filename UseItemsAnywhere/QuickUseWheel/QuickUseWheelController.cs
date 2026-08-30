@@ -30,6 +30,8 @@ internal sealed class QuickUseWheelController
     private bool _canvasWarningLogged;
 #endif
     private bool _shortcutHeld;
+    private bool _shortcutHoldTriggered;
+    private float _shortcutPressedTime;
     private bool _isOpen;
     private bool _cancelled;
     private Vector2 _selectionVector;
@@ -45,6 +47,7 @@ internal sealed class QuickUseWheelController
     private GamePlayerOwner? _playerOwner;
     private bool _previousBlockFirearms;
     private Action<Player>? _previousRotationAction;
+    private string? _lastItemTemplateId;
 
     internal static bool InputBlocked { get; private set; }
 
@@ -79,6 +82,7 @@ internal sealed class QuickUseWheelController
 
         if (!Application.isFocused && !_isOpen)
         {
+            ResetShortcutGesture();
             return;
         }
 
@@ -88,19 +92,25 @@ internal sealed class QuickUseWheelController
         if (shortcut.IsDown())
         {
             _shortcutHeld = true;
-            InputBlocked = true;
+            _shortcutHoldTriggered = false;
+            _shortcutPressedTime = Time.unscaledTime;
 #if DEBUG
             if (!_inputDetectionLogged)
             {
-                _logger?.LogInfo("Quick-use wheel input detected; attempting to open the Canvas.");
+                _logger?.LogInfo("Quick-use wheel tap/hold input detected.");
                 _inputDetectionLogged = true;
             }
 #endif
+        }
 
-            if (!_isOpen)
-            {
-                Open();
-            }
+        var shortcutPressed = _shortcutHeld && QuickUseWheelShortcut.IsMainKeyPressed(shortcut);
+        if (shortcutPressed
+            && !_shortcutHoldTriggered
+            && !_isOpen
+            && Time.unscaledTime - _shortcutPressedTime >= Configuration.QuickUseWheelHoldDuration.Value)
+        {
+            _shortcutHoldTriggered = true;
+            Open();
         }
 
         if (_isOpen)
@@ -108,7 +118,7 @@ internal sealed class QuickUseWheelController
             UpdateOpenWheel();
         }
 
-        if (_shortcutHeld && !QuickUseWheelShortcut.IsMainKeyPressed(shortcut))
+        if (_shortcutHeld && !shortcutPressed)
         {
             var useSelection = _isOpen
                 && !_cancelled
@@ -117,8 +127,17 @@ internal sealed class QuickUseWheelController
             if (_isOpen)
             {
                 PlaySound(useSelection ? EUISoundType.ButtonClick : EUISoundType.MenuEscape);
+                Close(useSelection);
             }
-            Close(useSelection);
+            else
+            {
+                var useLastItem = !_shortcutHoldTriggered && Configuration.QuickUseTapLastItem.Value;
+                ResetShortcutGesture();
+                if (useLastItem)
+                {
+                    UseLastItem();
+                }
+            }
         }
     }
 
@@ -289,7 +308,7 @@ internal sealed class QuickUseWheelController
     {
         if (!_isOpen)
         {
-            _shortcutHeld = false;
+            ResetShortcutGesture();
             InputBlocked = false;
             return;
         }
@@ -308,7 +327,7 @@ internal sealed class QuickUseWheelController
                 : null;
 
         RestoreInput();
-        _shortcutHeld = false;
+        ResetShortcutGesture();
         InputBlocked = false;
         _isOpen = false;
         _cancelled = false;
@@ -325,8 +344,47 @@ internal sealed class QuickUseWheelController
             && player
             && selectedItem != null)
         {
+            _lastItemTemplateId = selectedItem.TemplateId.ToString();
             UseSelectedItem(player, selectedItem, pendingItem);
         }
+    }
+
+    private void UseLastItem()
+    {
+        if (string.IsNullOrEmpty(_lastItemTemplateId)
+            || !TryGetLocalPlayer(out var player, out _)
+            || player.IsInventoryOpened
+            || !player.HealthController.IsAlive)
+        {
+            return;
+        }
+
+        var selectedItem = _inventory.ResolveItemForTemplate(player, _lastItemTemplateId);
+        if (selectedItem is null)
+        {
+            PlaySound(EUISoundType.MenuEscape);
+            return;
+        }
+
+        var pendingItem = ItemAccessDelayPatch.TryGetPendingItem(player, out var currentPendingItem)
+            ? currentPendingItem
+            : null;
+        if (pendingItem is not null)
+        {
+            switch (Configuration.PendingItemUseBehavior.Value)
+            {
+                case Configuration.PendingUseMode.Ignore:
+                    PlaySound(EUISoundType.MenuEscape);
+                    return;
+                case Configuration.PendingUseMode.OpenWheel:
+                    Open(true);
+                    return;
+            }
+        }
+
+        _lastItemTemplateId = selectedItem.TemplateId.ToString();
+        PlaySound(EUISoundType.ButtonClick);
+        UseSelectedItem(player, selectedItem, pendingItem);
     }
 
     private static void UseSelectedItem(Player player, Item selectedItem, Item? pendingItem)
@@ -358,6 +416,13 @@ internal sealed class QuickUseWheelController
                 _player.MovementContext.RotationAction = _previousRotationAction;
             }
         }
+    }
+
+    private void ResetShortcutGesture()
+    {
+        _shortcutHeld = false;
+        _shortcutHoldTriggered = false;
+        _shortcutPressedTime = 0f;
     }
 
     private void RefreshWheel()

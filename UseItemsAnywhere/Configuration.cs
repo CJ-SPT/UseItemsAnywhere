@@ -48,6 +48,8 @@ public static class Configuration
     
     public static ConfigEntry<bool> EnableQuickUseWheel = null!;
     public static ConfigEntry<KeyboardShortcut> QuickUseWheelKey = null!;
+    public static ConfigEntry<bool> QuickUseTapLastItem = null!;
+    public static ConfigEntry<float> QuickUseWheelHoldDuration = null!;
     public static ConfigEntry<bool> QuickUseWheelSounds = null!;
     public static ConfigEntry<int> QuickUseItemsPerPage = null!;
     public static ConfigEntry<bool> QuickUseGroupIdenticalItems = null!;
@@ -114,8 +116,26 @@ public static class Configuration
             "Quick Use Wheel Key",
             new KeyboardShortcut(KeyCode.H),
             new ConfigDescription(
-                "Key held to open and select from the quick-use item wheel.",
+                "Key tapped to reuse the last wheel item or held to open and select from the quick-use item wheel.",
                 null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseTapLastItem = configFile.Bind(
+            QuickUseWheel,
+            "Tap Uses Last Item",
+            true,
+            new ConfigDescription(
+                "Uses the last item template selected from the wheel when the wheel key is tapped.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseWheelHoldDuration = configFile.Bind(
+            QuickUseWheel,
+            "Wheel Hold Duration",
+            0.25f,
+            new ConfigDescription(
+                "Time, in seconds, the wheel key must be held before the quick-use wheel opens.",
+                new AcceptableValueRange<float>(0.1f, 1f),
                 new VersionChecker.ConfigurationManagerAttributes())));
 
         ConfigEntries.Add(QuickUseWheelSounds = configFile.Bind(

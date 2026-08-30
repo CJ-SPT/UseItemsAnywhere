@@ -254,6 +254,37 @@ internal sealed class QuickUseWheelInventory
         return selectedItem;
     }
 
+    internal Item? ResolveItemForTemplate(Player player, string templateId)
+    {
+        Populate(player);
+        try
+        {
+            Item? selectedItem = null;
+            foreach (var wheelItem in _items)
+            {
+                if (!string.Equals(
+                        wheelItem.Item.TemplateId.ToString(),
+                        templateId,
+                        StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var candidate = ResolveItemForUse(player, wheelItem);
+                if (candidate is not null
+                    && (selectedItem is null || ComparePreferredItems(player, candidate, selectedItem) < 0))
+                {
+                    selectedItem = candidate;
+                }
+            }
+            return selectedItem;
+        }
+        finally
+        {
+            ClearItems();
+        }
+    }
+
     private void AddWheelItem(Player player, IReadOnlyList<Item> groupedItems)
     {
         var item = SelectRepresentativeItem(player, groupedItems);
