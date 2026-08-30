@@ -3,6 +3,7 @@ using BepInEx.Logging;
 using Comfort.Common;
 using EFT;
 using EFT.InventoryLogic;
+using EFT.UI;
 using UnityEngine;
 using UseItemsAnywhere.Patches;
 using UseItemsAnywhere.UI;
@@ -22,6 +23,7 @@ internal sealed class QuickUseWheelController
 
     private readonly QuickUseWheelInventory _inventory = new();
     private readonly QuickUseWheelView _view = new();
+    private RuntimeUiService _ui = null!;
     private ManualLogSource? _logger;
 #if DEBUG
     private bool _inputDetectionLogged;
@@ -60,6 +62,7 @@ internal sealed class QuickUseWheelController
         RuntimeUiService ui)
     {
         _logger = logger;
+        _ui = ui;
         _inventory.LoadFavorites();
         _inventory.Initialize(ui);
         _view.Initialize(ui);
@@ -111,6 +114,10 @@ internal sealed class QuickUseWheelController
                 && !_cancelled
                 && _selectedIndex >= 0
                 && GetSelectedItem()?.IsUsable == true;
+            if (_isOpen)
+            {
+                PlaySound(useSelection ? EUISoundType.ButtonClick : EUISoundType.MenuEscape);
+            }
             Close(useSelection);
         }
     }
@@ -160,6 +167,7 @@ internal sealed class QuickUseWheelController
         if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
         {
             _cancelled = true;
+            PlaySound(EUISoundType.MenuEscape);
             Close(false);
             return;
         }
@@ -171,6 +179,7 @@ internal sealed class QuickUseWheelController
         else if (_openedFromPendingRequest && Input.GetMouseButtonDown(0))
         {
             var useSelection = _selectedIndex >= 0 && GetSelectedItem()?.IsUsable == true;
+            PlaySound(useSelection ? EUISoundType.ButtonClick : EUISoundType.MenuEscape);
             Close(useSelection);
             return;
         }
@@ -179,6 +188,7 @@ internal sealed class QuickUseWheelController
         if (Mathf.Abs(scroll) > 0.01f && PageCount > 1)
         {
             _page = Mod(_page + (scroll < 0f ? 1 : -1), PageCount);
+            PlaySound(EUISoundType.MenuDropdownSelect);
             RefreshWheel();
         }
     }
@@ -249,6 +259,7 @@ internal sealed class QuickUseWheelController
 
         _view.Show();
         RefreshWheel();
+        PlaySound(EUISoundType.MenuContextMenu);
     }
 
     private void RefreshUnavailableWheel()
@@ -423,11 +434,13 @@ internal sealed class QuickUseWheelController
         }
 
         _inventory.ToggleFavorite(selectedItem.Value);
+        PlaySound(EUISoundType.MenuCheckBox);
         RefreshWheel();
     }
 
     private void UpdateSelection()
     {
+        var previousSelectedIndex = _selectedIndex;
         var mouseDelta = new Vector2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y"));
         if (mouseDelta.sqrMagnitude > 100f)
         {
@@ -438,6 +451,10 @@ internal sealed class QuickUseWheelController
             _selectionVector + mouseDelta * MouseSelectionSpeed,
             MaximumSelectionRadius);
         UpdateSelectedIndex();
+        if (_selectedIndex >= 0 && _selectedIndex != previousSelectedIndex)
+        {
+            PlaySound(EUISoundType.ButtonOver);
+        }
     }
 
     private void UpdateSelectedIndex()
@@ -502,4 +519,9 @@ internal sealed class QuickUseWheelController
     }
 
     private static int Mod(int value, int modulo) => (value % modulo + modulo) % modulo;
+
+    private void PlaySound(EUISoundType soundType)
+    {
+        _ui.PlaySound(Configuration.QuickUseWheelSounds.Value, soundType, "Quick-use wheel");
+    }
 }

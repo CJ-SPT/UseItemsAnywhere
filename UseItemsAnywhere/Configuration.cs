@@ -24,7 +24,7 @@ public static class Configuration
     private static ConfigEntry<List<EquipmentSlot>> _weaponSlots = null!; 
     public static HashSet<EquipmentSlot> AllAllowedWeaponSlots => [..DefaultWeaponSlots, .._weaponSlots.Value];
     public static ConfigEntry<List<EquipmentSlot>> GrenadeThrowSlots = null!;
-    public static ConfigEntry<List<EquipmentSlot>> _meleeSlots = null!;
+    private static ConfigEntry<List<EquipmentSlot>> _meleeSlots = null!;
     public static HashSet<EquipmentSlot> AllAllowedMeleeSlots => [EquipmentSlot.Scabbard, .._meleeSlots.Value];
     public static ConfigEntry<List<EquipmentSlot>> FlareSlots = null!; 
     public static ConfigEntry<List<EquipmentSlot>> ReloadSlots = null!;
@@ -41,6 +41,7 @@ public static class Configuration
     
     public static ConfigEntry<bool> EnableQuickUseWheel = null!;
     public static ConfigEntry<KeyboardShortcut> QuickUseWheelKey = null!;
+    public static ConfigEntry<bool> QuickUseWheelSounds = null!;
     public static ConfigEntry<int> QuickUseItemsPerPage = null!;
     public static ConfigEntry<bool> QuickUseShowSourceSlot = null!;
     public static ConfigEntry<bool> QuickUseShowItemState = null!;
@@ -105,6 +106,15 @@ public static class Configuration
             new KeyboardShortcut(KeyCode.H),
             new ConfigDescription(
                 "Key held to open and select from the quick-use item wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseWheelSounds = configFile.Bind(
+            QuickUseWheel,
+            "Wheel Sounds",
+            true,
+            new ConfigDescription(
+                "Plays interface sounds when opening, navigating, or confirming the quick-use wheel.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 

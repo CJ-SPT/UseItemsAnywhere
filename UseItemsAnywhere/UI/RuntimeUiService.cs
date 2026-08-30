@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using BepInEx.Logging;
+using Comfort.Common;
 using EFT;
 using EFT.InventoryLogic;
+using EFT.UI;
 using EFT.UI.DragAndDrop;
 using UnityEngine;
 
@@ -154,6 +156,26 @@ internal sealed class RuntimeUiService
         EquipmentSlot.SecuredContainer => "SECURE CONTAINER",
         _ => slot.ToString(),
     };
+
+    internal void PlaySound(bool enabled, EUISoundType soundType, string source)
+    {
+        if (!enabled || !Singleton<GUISounds>.Instantiated)
+        {
+            return;
+        }
+
+        try
+        {
+            Singleton<GUISounds>.Instance.PlayUISound(soundType);
+        }
+        catch (Exception exception)
+        {
+            _ = exception;
+#if DEBUG
+            _logger.LogWarning($"{source} sound could not be played: {exception.Message}");
+#endif
+        }
+    }
 
     internal void Destroy()
     {

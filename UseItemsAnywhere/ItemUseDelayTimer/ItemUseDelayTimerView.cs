@@ -1,9 +1,5 @@
-using System;
-using BepInEx.Logging;
-using Comfort.Common;
 using EFT;
 using EFT.InventoryLogic;
-using EFT.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -28,7 +24,6 @@ internal sealed class ItemUseDelayTimerView
     private TMP_Text? _detailText;
     private TMP_Text? _cancelHint;
     private ItemIcon? _itemIcon;
-    private ManualLogSource? _logger;
     private float _duration;
     private bool _visible;
 
@@ -39,7 +34,6 @@ internal sealed class ItemUseDelayTimerView
     internal void Initialize(RuntimeUiService ui)
     {
         _ui = ui;
-        _logger = ui.Logger;
         _document = ui.CreateDocument(
             "Item-use delay timer",
             "itemusedelaytimer",
@@ -142,7 +136,6 @@ internal sealed class ItemUseDelayTimerView
         _document = null;
         _transition = null;
         _ui = null;
-        _logger = null;
     }
 
     private void BindPrefab(RuntimeUiDocument document)
@@ -171,23 +164,10 @@ internal sealed class ItemUseDelayTimerView
 
     private void PlayResultSound(bool completed)
     {
-        if (!Configuration.TimerSounds.Value || !Singleton<GUISounds>.Instantiated)
-        {
-            return;
-        }
-
-        try
-        {
-            Singleton<GUISounds>.Instance.PlayUISound(
-                completed ? EUISoundType.ButtonBottomBarClick : EUISoundType.MenuEscape);
-        }
-        catch (Exception exception)
-        {
-            _ = exception;
-#if DEBUG
-            _logger?.LogWarning($"Item-use delay timer sound could not be played: {exception.Message}");
-#endif
-        }
+        _ui?.PlaySound(
+            Configuration.TimerSounds.Value,
+            completed ? EFT.UI.EUISoundType.ButtonBottomBarClick : EFT.UI.EUISoundType.MenuEscape,
+            "Item-use delay timer");
     }
 
     private static string GetDelayDetail(Configuration.ItemAccessDelayInfo delayInfo)
