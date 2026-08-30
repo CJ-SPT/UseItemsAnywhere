@@ -216,7 +216,7 @@ public static class Configuration
                 EquipmentSlot.Pockets,
             },
             new ConfigDescription(
-                "Configures which slots can supply melee weapons.",
+                "Configures which slots can supply grenades.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes
                 {
@@ -232,7 +232,7 @@ public static class Configuration
                 EquipmentSlot.Pockets,
             },
             new ConfigDescription(
-                "Configures which slots can supply grenades.",
+                "Configures which slots can supply melee weapons.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes
                 {

@@ -91,7 +91,7 @@ internal sealed class QuickUseWheelInventory
         // Separate iterators so each category respects its configured source slots.
         if (Configuration.QuickUseShowPrimAndSecWeapons.Value)
         {
-            foreach (var item in inventory.GetItemsInSlots(Configuration.DefaultWeaponSlots))
+            foreach (var item in inventory.GetItemsInSlots(Configuration.AllAllowedWeaponSlots))
             {
                 if (item is Weapon && _seenItems.Add(item))
                 {

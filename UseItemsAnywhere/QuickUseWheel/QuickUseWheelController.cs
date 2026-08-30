@@ -13,7 +13,7 @@ namespace UseItemsAnywhere.QuickUseWheel;
 internal sealed class QuickUseWheelController
 {
     private const float CenterCancelRadius = 104f;
-    private const float EmptyWheelRefreshInterval = 0.15f;
+    private const float WheelRefreshInterval = 0.15f;
     private const float MouseSelectionSpeed = 24f;
     private const float MaximumSelectionRadius = 280f;
     private const float MaximumVisibleSegmentDegrees = 42f;
@@ -37,7 +37,7 @@ internal sealed class QuickUseWheelController
     private int _pageStartIndex;
     private int _pageItemCount;
     private int _selectedIndex = -1;
-    private float _nextEmptyWheelRefreshTime;
+    private float _nextWheelRefreshTime;
     private Player? _player;
     private Item? _pendingItemOnOpen;
     private bool _openedFromPendingRequest;
@@ -156,7 +156,7 @@ internal sealed class QuickUseWheelController
             return;
         }
 
-        RefreshUnavailableWheel();
+        RefreshWheelItems();
         UpdateSelection();
         if (Input.GetMouseButtonDown(2))
         {
@@ -247,7 +247,7 @@ internal sealed class QuickUseWheelController
         _page = 0;
         _pageStartIndex = 0;
         _pageItemCount = 0;
-        _nextEmptyWheelRefreshTime = Time.unscaledTime + EmptyWheelRefreshInterval;
+        _nextWheelRefreshTime = Time.unscaledTime + WheelRefreshInterval;
         _cancelled = false;
         _isOpen = true;
         InputBlocked = true;
@@ -262,19 +262,17 @@ internal sealed class QuickUseWheelController
         PlaySound(EUISoundType.MenuContextMenu);
     }
 
-    private void RefreshUnavailableWheel()
+    private void RefreshWheelItems()
     {
-        var hasQueuedItems = _inventory.HasQueuedItems;
         var hadUsableItem = _inventory.HasUsableItems;
-        if ((!hasQueuedItems && hadUsableItem)
-            || _player is null
+        if (_player is null
             || !_player
-            || Time.unscaledTime < _nextEmptyWheelRefreshTime)
+            || Time.unscaledTime < _nextWheelRefreshTime)
         {
             return;
         }
 
-        _nextEmptyWheelRefreshTime = Time.unscaledTime + EmptyWheelRefreshInterval;
+        _nextWheelRefreshTime = Time.unscaledTime + WheelRefreshInterval;
         _inventory.Populate(_player);
         _page = Mathf.Clamp(_page, 0, PageCount - 1);
         RefreshWheel();

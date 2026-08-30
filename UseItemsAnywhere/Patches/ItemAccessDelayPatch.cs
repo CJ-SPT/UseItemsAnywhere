@@ -240,6 +240,11 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                 yield break;
             }
 
+            if (!QuickUseWheelInventory.IsItemStillUsable(player, request.Item))
+            {
+                yield break;
+            }
+
             var completeCallback = request.CompleteCallback;
             if (pendingAccess.FollowUp is { StartAfterCurrentUse: true } queuedFollowUp)
             {
@@ -269,8 +274,17 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                 };
             }
 
+            var resultPresentation = presentation;
+            var resultCallback = completeCallback;
+            completeCallback = result =>
+            {
+                resultPresentation?.Finish(result.Succeed);
+                resultCallback?.Invoke(result);
+            };
+
             BypassPlayers.Add(player);
             player.TryProceed(request.Item, completeCallback, request.Scheduled);
+            presentation = null;
             completed = true;
         }
         finally
