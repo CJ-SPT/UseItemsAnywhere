@@ -5,18 +5,22 @@ using DrakiaXYZ.VersionChecker;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.ItemUseDelayTimer;
 using UseItemsAnywhere.Patches;
+using UseItemsAnywhere.QuickUseWheel;
+using UseItemsAnywhere.UI;
 
 namespace UseItemsAnywhere;
 
-[BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.1.1")]
+[BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.1.2")]
 [BepInDependency("com.SPT.custom", "4.1.0")]
 public class Plugin : BaseUnityPlugin
 {
-    private readonly QuickUseWheel _quickUseWheel = new();
-    private readonly ItemUseDelayTimer _itemUseDelayTimer = new();
+    private readonly QuickUseWheelController _quickUseWheel = new();
+    private readonly ItemUseDelayTimerController _itemUseDelayTimer = new();
+    private RuntimeUiService? _runtimeUi;
 
-    internal static ItemUseDelayTimer? DelayTimer { get; private set; }
+    internal static ItemUseDelayTimerController? DelayTimer { get; private set; }
 
     public const int TarkovVersion = 40743;
 
@@ -39,8 +43,9 @@ public class Plugin : BaseUnityPlugin
         DontDestroyOnLoad(this);
         Configuration.Init(Config);
         var pluginDirectory = Path.GetDirectoryName(Info.Location)!;
-        _quickUseWheel.Initialize(pluginDirectory, Logger, transform);
-        _itemUseDelayTimer.Initialize(pluginDirectory, Logger, transform);
+        _runtimeUi = new RuntimeUiService(pluginDirectory, Logger, transform);
+        _quickUseWheel.Initialize(Logger, _runtimeUi);
+        _itemUseDelayTimer.Initialize(_runtimeUi);
         DelayTimer = _itemUseDelayTimer;
 
         var fastAccessSlots = AccessTools.Field(
@@ -69,5 +74,7 @@ public class Plugin : BaseUnityPlugin
         DelayTimer = null;
         _itemUseDelayTimer.OnDestroy();
         _quickUseWheel.OnDestroy();
+        _runtimeUi?.Destroy();
+        _runtimeUi = null;
     }
 }

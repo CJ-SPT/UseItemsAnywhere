@@ -3,6 +3,7 @@ using EFT;
 using EFT.InputSystem;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.QuickUseWheel;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -18,7 +19,7 @@ internal sealed class QuickUseWheelInputPatch : ModulePatch
     [PatchPrefix]
     private static bool Prefix(ref InputNode.ETranslateResult __result)
     {
-        if (!QuickUseWheel.InputBlocked)
+        if (!QuickUseWheelController.InputBlocked)
         {
             return true;
         }

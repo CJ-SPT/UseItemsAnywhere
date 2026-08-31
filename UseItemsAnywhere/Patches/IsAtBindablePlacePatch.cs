@@ -29,7 +29,7 @@ public class IsAtBindablePlace : ModulePatch
             return;
         }
 
-        if (!IsValidItemForBinding(item) || !__instance.Examined(item))
+        if (!__instance.Examined(item))
         {
             return;
         }
@@ -70,16 +70,4 @@ public class IsAtBindablePlace : ModulePatch
         }
     }
 
-    private static bool IsValidItemForBinding(Item item)
-    {
-        return item is Weapon
-            || item is ThrowWeap
-            || item is Meds
-            || item is Food
-            || item is Compass
-            || item is PortableRangeFinder
-            || item is RadioTransmitter
-            || item.GetItemComponent<KnifeComponent>() != null
-            || Configuration.FlareIds.Contains(item.TemplateId);
-    }
 }

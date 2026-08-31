@@ -19,12 +19,19 @@ public static class Configuration
         OpenWheel,
     }
 
+    public enum GroupedItemSelectionMode
+    {
+        LowestResourceFirst,
+        HighestResourceFirst,
+        FastestAccessFirst,
+    }
+
     public static readonly HashSet<EquipmentSlot> DefaultWeaponSlots =
         [EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster];
     private static ConfigEntry<List<EquipmentSlot>> _weaponSlots = null!; 
     public static HashSet<EquipmentSlot> AllAllowedWeaponSlots => [..DefaultWeaponSlots, .._weaponSlots.Value];
     public static ConfigEntry<List<EquipmentSlot>> GrenadeThrowSlots = null!;
-    public static ConfigEntry<List<EquipmentSlot>> _meleeSlots = null!;
+    private static ConfigEntry<List<EquipmentSlot>> _meleeSlots = null!;
     public static HashSet<EquipmentSlot> AllAllowedMeleeSlots => [EquipmentSlot.Scabbard, .._meleeSlots.Value];
     public static ConfigEntry<List<EquipmentSlot>> FlareSlots = null!; 
     public static ConfigEntry<List<EquipmentSlot>> ReloadSlots = null!;
@@ -41,12 +48,18 @@ public static class Configuration
     
     public static ConfigEntry<bool> EnableQuickUseWheel = null!;
     public static ConfigEntry<KeyboardShortcut> QuickUseWheelKey = null!;
+    public static ConfigEntry<bool> QuickUseTapLastItem = null!;
+    public static ConfigEntry<float> QuickUseWheelHoldDuration = null!;
+    public static ConfigEntry<bool> QuickUseWheelSounds = null!;
     public static ConfigEntry<int> QuickUseItemsPerPage = null!;
+    public static ConfigEntry<bool> QuickUseGroupIdenticalItems = null!;
+    public static ConfigEntry<GroupedItemSelectionMode> QuickUseGroupedItemSelection = null!;
     public static ConfigEntry<bool> QuickUseShowSourceSlot = null!;
     public static ConfigEntry<bool> QuickUseShowItemState = null!;
     internal static ConfigEntry<string> QuickUseFavoriteTemplateIds = null!;
     public static ConfigEntry<bool> QuickUseShowPrimAndSecWeapons = null!;
     public static ConfigEntry<bool> QuickUseShowMelee = null!;
+    public static ConfigEntry<bool> QuickUseShowGrenades = null!;
     public static ConfigEntry<bool> QuickUseShowMeds = null!;
     public static ConfigEntry<bool> QuickUseShowFoodDrink = null!;
     public static ConfigEntry<bool> QuickUseShowFlares = null!;
@@ -103,7 +116,34 @@ public static class Configuration
             "Quick Use Wheel Key",
             new KeyboardShortcut(KeyCode.H),
             new ConfigDescription(
-                "Key held to open and select from the quick-use item wheel.",
+                "Key tapped to reuse the last wheel item or held to open and select from the quick-use item wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseTapLastItem = configFile.Bind(
+            QuickUseWheel,
+            "Tap Uses Last Item",
+            true,
+            new ConfigDescription(
+                "Uses the last item template selected from the wheel when the wheel key is tapped.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseWheelHoldDuration = configFile.Bind(
+            QuickUseWheel,
+            "Wheel Hold Duration",
+            0.25f,
+            new ConfigDescription(
+                "Time, in seconds, the wheel key must be held before the quick-use wheel opens.",
+                new AcceptableValueRange<float>(0.1f, 1f),
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseWheelSounds = configFile.Bind(
+            QuickUseWheel,
+            "Wheel Sounds",
+            true,
+            new ConfigDescription(
+                "Plays interface sounds when opening, navigating, or confirming the quick-use wheel.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
@@ -114,6 +154,24 @@ public static class Configuration
             new ConfigDescription(
                 "Maximum number of items displayed on each wheel page.",
                 new AcceptableValueRange<int>(4, 12),
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseGroupIdenticalItems = configFile.Bind(
+            QuickUseWheel,
+            "Group Identical Items",
+            true,
+            new ConfigDescription(
+                "Groups consumables, grenades, and flares with the same item template into one wheel segment.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(QuickUseGroupedItemSelection = configFile.Bind(
+            QuickUseWheel,
+            "Grouped Item Selection",
+            GroupedItemSelectionMode.LowestResourceFirst,
+            new ConfigDescription(
+                "Controls which usable item is selected from a group: preserve fuller items, use fuller items first, or use the item with the shortest access delay.",
+                null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
         ConfigEntries.Add(QuickUseShowSourceSlot = configFile.Bind(
@@ -140,6 +198,15 @@ public static class Configuration
             true,
             new ConfigDescription(
                 "Configures whether or not to show melee weapon in the quick wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+        
+        ConfigEntries.Add(QuickUseShowGrenades = configFile.Bind(
+            QuickUseWheel,
+            "Show Grenades",
+            true,
+            new ConfigDescription(
+                "Configures whether or not to show grenades in the quick wheel.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
         
@@ -196,7 +263,7 @@ public static class Configuration
                 EquipmentSlot.Pockets,
             },
             new ConfigDescription(
-                "Configures which slots can supply melee weapons.",
+                "Configures which slots can supply grenades.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes
                 {
@@ -212,7 +279,7 @@ public static class Configuration
                 EquipmentSlot.Pockets,
             },
             new ConfigDescription(
-                "Configures which slots can supply grenades.",
+                "Configures which slots can supply melee weapons.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes
                 {

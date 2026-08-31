@@ -260,7 +260,7 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
 
         var pageHint = CreateText("PageHint", root.transform, 12f, FontStyles.Normal, new Color(0.64f, 0.66f, 0.65f, 1f));
         pageHint.rectTransform.anchorMin = pageHint.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-        pageHint.rectTransform.sizeDelta = new Vector2(420f, 30f);
+        pageHint.rectTransform.sizeDelta = new Vector2(760f, 30f);
         pageHint.rectTransform.anchoredPosition = new Vector2(0f, -325f);
         pageHint.gameObject.SetActive(false);
 
