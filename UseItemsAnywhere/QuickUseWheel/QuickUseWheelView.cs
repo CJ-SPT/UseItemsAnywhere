@@ -24,6 +24,7 @@ internal sealed class QuickUseWheelView
     private Image? _segmentTemplate;
     private RectTransform? _itemTemplate;
     private Image? _centerBorder;
+    private TMP_Text? _centerHeader;
     private TMP_Text? _selectedName;
     private TMP_Text? _cancelHint;
     private TMP_Text? _pageHint;
@@ -59,23 +60,24 @@ internal sealed class QuickUseWheelView
     }
 
     internal void Refresh(
-        IReadOnlyList<QuickUseWheelItem> items,
+        IReadOnlyList<QuickUseWheelEntry> items,
         int pageStartIndex,
         int pageItemCount,
         int page,
         int pageCount,
-        bool openedFromPendingRequest)
+        QuickUseWheelViewState state)
     {
         EnsureViewCount(pageItemCount);
         ClearViews();
+        _centerHeader!.text = state.Header;
 
         if (pageItemCount == 0)
         {
-            _selectedName!.text = "NO ITEMS\nAVAILABLE";
-            _cancelHint!.text = "CHECK YOUR LOADOUT";
+            _selectedName!.text = state.EmptyTitle;
+            _cancelHint!.text = state.EmptyHint;
             _centerBorder!.color = new Color(0.34f, 0.36f, 0.36f, 0.96f);
-            UpdateModeStatus(page, pageCount);
-            _controls!.text = "RELEASE / ESC / RIGHT CLICK TO CLOSE";
+            UpdateModeStatus(page, pageCount, state.Status);
+            _controls!.text = state.Controls;
             _presentedSelectedIndex = -1;
             return;
         }
@@ -113,33 +115,27 @@ internal sealed class QuickUseWheelView
             view.State.color = wheelItem.IsQueued
                 ? QueuedNameColor
                 : new Color(0.72f, 0.74f, 0.72f, 1f);
-            view.State.gameObject.SetActive(
-                wheelItem.IsQueued
-                || wheelItem.IsGrouped
-                || Configuration.QuickUseShowItemState.Value
-                && !string.IsNullOrEmpty(wheelItem.State));
+            view.State.gameObject.SetActive(wheelItem.ShowState && !string.IsNullOrEmpty(wheelItem.State));
             view.Source.text = wheelItem.SourceName;
             view.Source.color = wheelItem.IsQueued
                 ? new Color(0.54f, 0.49f, 0.34f, 1f)
                 : new Color(0.45f, 0.47f, 0.46f, 1f);
-            view.Source.gameObject.SetActive(Configuration.QuickUseShowSourceSlot.Value);
+            view.Source.gameObject.SetActive(wheelItem.ShowSource);
             view.FavoriteBadge.gameObject.SetActive(wheelItem.IsFavorite);
         }
 
         _cancelHint!.text = "CENTER TO CANCEL";
-        UpdateModeStatus(page, pageCount);
-        _controls!.text = openedFromPendingRequest
-            ? "LMB CONFIRM   •   MMB FAVORITE   •   ESC / RIGHT CLICK TO CLOSE"
-            : "RELEASE TO USE   •   MMB FAVORITE   •   ESC / RIGHT CLICK TO CANCEL";
+        UpdateModeStatus(page, pageCount, state.Status);
+        _controls!.text = state.Controls;
         _presentedSelectedIndex = int.MinValue;
     }
 
     internal void UpdatePresentation(
-        IReadOnlyList<QuickUseWheelItem> items,
+        IReadOnlyList<QuickUseWheelEntry> items,
         int pageStartIndex,
         int pageItemCount,
         int selectedIndex,
-        QuickUseWheelItem? selectedItem,
+        QuickUseWheelEntry? selectedItem,
         string selectionHint)
     {
         if (_document?.IsAvailable != true)
@@ -208,6 +204,7 @@ internal sealed class QuickUseWheelView
         _segmentTemplate = document.Require<Image>("WheelRoot/SegmentLayer/SegmentTemplate");
         _itemTemplate = document.Require<RectTransform>("WheelRoot/ItemLayer/ItemTemplate");
         _centerBorder = document.Require<Image>("WheelRoot/CenterBorder");
+        _centerHeader = document.Require<TMP_Text>("WheelRoot/Center/CenterHeader/CenterHeaderText");
         _selectedName = document.Require<TMP_Text>("WheelRoot/Center/SelectedName");
         _cancelHint = document.Require<TMP_Text>("WheelRoot/Center/CancelHint");
         _pageHint = document.Require<TMP_Text>("PageHint");
@@ -215,30 +212,13 @@ internal sealed class QuickUseWheelView
         _controls = document.Require<TMP_Text>("Controls");
     }
 
-    private void UpdateModeStatus(int page, int pageCount)
+    private void UpdateModeStatus(int page, int pageCount, string status)
     {
-        var pendingMode = Configuration.PendingItemUseBehavior.Value switch
-        {
-            Configuration.PendingUseMode.Ignore => "IGNORE",
-            Configuration.PendingUseMode.CancelAndReplace => "REPLACE",
-            Configuration.PendingUseMode.QueueOne => "QUEUE ONE",
-            Configuration.PendingUseMode.OpenWheel => "OPEN WHEEL",
-            _ => "UNKNOWN",
-        };
-        var groupingMode = !Configuration.QuickUseGroupIdenticalItems.Value
-            ? "OFF"
-            : Configuration.QuickUseGroupedItemSelection.Value switch
-            {
-                Configuration.GroupedItemSelectionMode.LowestResourceFirst => "LOWEST RESOURCE",
-                Configuration.GroupedItemSelectionMode.HighestResourceFirst => "HIGHEST RESOURCE",
-                Configuration.GroupedItemSelectionMode.FastestAccessFirst => "FASTEST ACCESS",
-                _ => "UNKNOWN",
-            };
         var pageStatus = pageCount > 1
             ? $"PAGE {page + 1} / {pageCount}   •   MOUSE WHEEL     "
             : string.Empty;
-        _pageHint!.text = $"{pageStatus}PENDING: {pendingMode}   •   GROUP: {groupingMode}";
-        _pageHint.gameObject.SetActive(true);
+        _pageHint!.text = $"{pageStatus}{status}";
+        _pageHint.gameObject.SetActive(!string.IsNullOrEmpty(_pageHint.text));
     }
 
     private void ClearViews()

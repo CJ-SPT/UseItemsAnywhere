@@ -12,7 +12,7 @@ using UseItemsAnywhere.UI;
 
 namespace UseItemsAnywhere;
 
-[BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.1.2")]
+[BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.2.0")]
 [BepInDependency("com.SPT.custom", "4.1.0")]
 public class Plugin : BaseUnityPlugin
 {

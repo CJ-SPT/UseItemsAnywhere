@@ -48,6 +48,8 @@ public static class Configuration
     
     public static ConfigEntry<bool> EnableQuickUseWheel = null!;
     public static ConfigEntry<KeyboardShortcut> QuickUseWheelKey = null!;
+    public static ConfigEntry<bool> EnableWeaponDeviceWheel = null!;
+    public static ConfigEntry<KeyboardShortcut> WeaponDeviceWheelKey = null!;
     public static ConfigEntry<bool> QuickUseTapLastItem = null!;
     public static ConfigEntry<float> QuickUseWheelHoldDuration = null!;
     public static ConfigEntry<bool> QuickUseWheelSounds = null!;
@@ -117,6 +119,24 @@ public static class Configuration
             new KeyboardShortcut(KeyCode.H),
             new ConfigDescription(
                 "Key tapped to reuse the last wheel item or held to open and select from the quick-use item wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(EnableWeaponDeviceWheel = configFile.Bind(
+            QuickUseWheel,
+            "Enable Weapon Device Wheel",
+            true,
+            new ConfigDescription(
+                "Configures whether or not the weapon-device wheel is enabled.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(WeaponDeviceWheelKey = configFile.Bind(
+            QuickUseWheel,
+            "Weapon Device Wheel Key",
+            new KeyboardShortcut(KeyCode.H, KeyCode.LeftAlt),
+            new ConfigDescription(
+                "Key held to open and control tactical devices mounted on the weapon currently in hand.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
