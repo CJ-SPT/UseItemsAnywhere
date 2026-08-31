@@ -17,11 +17,15 @@ internal sealed class QuickUseWheelView
     private static readonly Color NormalNameColor = new(0.82f, 0.83f, 0.8f, 1f);
     private static readonly Color UnavailableNameColor = new(0.43f, 0.44f, 0.42f, 1f);
     private static readonly Color QueuedNameColor = new(0.73f, 0.66f, 0.43f, 1f);
+    private static readonly Color NormalIconFrameColor = new(0.32f, 0.34f, 0.34f, 0.96f);
+    private static readonly Color SelectedIconFrameColor = new(0.68f, 0.71f, 0.7f, 1f);
+    private static readonly Color UnavailableIconFrameColor = new(0.3f, 0.18f, 0.16f, 0.92f);
+    private static readonly Color QueuedIconFrameColor = new(0.55f, 0.48f, 0.29f, 0.96f);
 
     private readonly List<SegmentView> _views = [];
     private RuntimeUiDocument? _document;
     private RuntimeUiTransition? _transition;
-    private Image? _segmentTemplate;
+    private RectTransform? _segmentTemplate;
     private RectTransform? _itemTemplate;
     private Image? _centerBorder;
     private TMP_Text? _centerHeader;
@@ -51,7 +55,7 @@ internal sealed class QuickUseWheelView
         }
 
         _document.Show();
-        _transition!.BeginEntrance(0.92f);
+        _transition!.BeginEntrance(1f);
     }
 
     internal void Hide()
@@ -94,11 +98,11 @@ internal sealed class QuickUseWheelView
             var view = _views[index];
             var wheelItem = items[pageStartIndex + index];
             view.Segment.gameObject.SetActive(true);
-            view.Segment.fillAmount = visibleSegmentDegrees / 360f;
-            view.Segment.rectTransform.localEulerAngles = new Vector3(0f, 0f, visibleSegmentDegrees * 0.5f - index * slice);
+            view.Segment.Configure(index * slice, visibleSegmentDegrees);
 
             var angle = index * slice * Mathf.Deg2Rad;
             view.ItemRoot.gameObject.SetActive(true);
+            view.ItemRoot.localScale = Vector3.one;
             view.ItemRoot.anchoredPosition = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle)) * labelRadius;
             view.ItemRoot.sizeDelta = new Vector2(labelWidth, 140f);
             view.Name.rectTransform.sizeDelta = new Vector2(labelWidth, 28f);
@@ -160,10 +164,11 @@ internal sealed class QuickUseWheelView
                 : !wheelItem.IsUsable
                     ? UnavailableNameColor
                     : selected ? Color.white : NormalNameColor;
-            view.ItemRoot.localScale = Vector3.Lerp(
-                view.ItemRoot.localScale,
-                selected ? Vector3.one * 1.08f : Vector3.one,
-                Time.unscaledDeltaTime * 20f);
+            view.IconFrame.color = wheelItem.IsQueued
+                ? QueuedIconFrameColor
+                : !wheelItem.IsUsable
+                    ? UnavailableIconFrameColor
+                    : selected ? SelectedIconFrameColor : NormalIconFrameColor;
             if (!view.Icon.sprite && wheelItem.Icon?.Sprite)
             {
                 view.Icon.sprite = wheelItem.Icon!.Sprite;
@@ -201,7 +206,7 @@ internal sealed class QuickUseWheelView
         var canvasGroup = document.Require<CanvasGroup>(string.Empty);
         var wheelRoot = document.Require<RectTransform>("WheelRoot");
         _transition = new RuntimeUiTransition(canvasGroup, wheelRoot);
-        _segmentTemplate = document.Require<Image>("WheelRoot/SegmentLayer/SegmentTemplate");
+        _segmentTemplate = document.Require<RectTransform>("WheelRoot/SegmentLayer/SegmentTemplate");
         _itemTemplate = document.Require<RectTransform>("WheelRoot/ItemLayer/ItemTemplate");
         _centerBorder = document.Require<Image>("WheelRoot/CenterBorder");
         _centerHeader = document.Require<TMP_Text>("WheelRoot/Center/CenterHeader/CenterHeaderText");
@@ -231,6 +236,8 @@ internal sealed class QuickUseWheelView
             view.Name.text = string.Empty;
             view.State.text = string.Empty;
             view.Source.text = string.Empty;
+            view.IconFrame.color = NormalIconFrameColor;
+            view.ItemRoot.localScale = Vector3.one;
             view.FavoriteBadge.gameObject.SetActive(false);
         }
     }
@@ -239,32 +246,38 @@ internal sealed class QuickUseWheelView
     {
         while (_views.Count < count)
         {
-            var segment = UnityEngine.Object.Instantiate(_segmentTemplate!, _segmentTemplate!.transform.parent);
-            segment.name = $"Segment_{_views.Count}";
+            var segmentRoot = UnityEngine.Object.Instantiate(_segmentTemplate!, _segmentTemplate!.parent);
+            segmentRoot.name = $"Segment_{_views.Count}";
+            var segment = segmentRoot.gameObject.AddComponent<QuickUseWheelSegmentGraphic>();
+            segment.raycastTarget = false;
+            segment.color = NormalSegmentColor;
             var itemRoot = UnityEngine.Object.Instantiate(_itemTemplate!, _itemTemplate!.parent);
             itemRoot.name = $"Item_{_views.Count}";
             _views.Add(new SegmentView(
                 segment,
                 itemRoot,
-                RuntimeUiDocument.Require<Image>(itemRoot, "Icon"),
+                RuntimeUiDocument.Require<Image>(itemRoot, "IconFrame"),
+                RuntimeUiDocument.Require<Image>(itemRoot, "IconFrame/Icon"),
                 RuntimeUiDocument.Require<TMP_Text>(itemRoot, "Name"),
                 RuntimeUiDocument.Require<TMP_Text>(itemRoot, "State"),
                 RuntimeUiDocument.Require<TMP_Text>(itemRoot, "Source"),
-                RuntimeUiDocument.Require<RectTransform>(itemRoot, "FavoriteBadge")));
+                RuntimeUiDocument.Require<RectTransform>(itemRoot, "IconFrame/FavoriteBadge")));
         }
     }
 
     private sealed class SegmentView(
-        Image segment,
+        QuickUseWheelSegmentGraphic segment,
         RectTransform itemRoot,
+        Image iconFrame,
         Image icon,
         TMP_Text name,
         TMP_Text state,
         TMP_Text source,
         RectTransform favoriteBadge)
     {
-        internal Image Segment { get; } = segment;
+        internal QuickUseWheelSegmentGraphic Segment { get; } = segment;
         internal RectTransform ItemRoot { get; } = itemRoot;
+        internal Image IconFrame { get; } = iconFrame;
         internal Image Icon { get; } = icon;
         internal TMP_Text Name { get; } = name;
         internal TMP_Text State { get; } = state;

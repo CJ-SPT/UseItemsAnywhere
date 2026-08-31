@@ -426,7 +426,7 @@ internal sealed class QuickUseWheelController
                 false,
                 false,
                 true,
-                true,
+                !string.IsNullOrEmpty(device.SourceName),
                 device.Icon));
         }
     }
@@ -618,7 +618,7 @@ internal sealed class QuickUseWheelController
                 "WEAPON DEVICES",
                 "NO DEVICES\nAVAILABLE",
                 "EQUIP A WEAPON WITH TACTICAL DEVICES",
-                "LMB TOGGLE   •   MMB NEXT MODE   •   RELEASE / ESC / RIGHT CLICK TO CLOSE",
+                "LMB TOGGLE   •   MMB MODE   •   RELEASE / ESC / RMB CLOSE",
                 "CHANGES APPLY IMMEDIATELY");
         }
 
@@ -676,9 +676,9 @@ internal sealed class QuickUseWheelController
             }
             return GetSelectedDevice() switch
             {
-                { IsAggregate: true, CanCycleMode: true } => "LMB: TOGGLE ALL  •  MMB: NEXT MODES",
+                { IsAggregate: true, CanCycleMode: true } => "LMB TOGGLE ALL\nMMB NEXT MODES",
                 { IsAggregate: true } => "LMB: TOGGLE ALL",
-                { CanCycleMode: true } => "LMB: TOGGLE  •  MMB: NEXT MODE",
+                { CanCycleMode: true } => "LMB TOGGLE\nMMB NEXT MODE",
                 _ => "LMB: TOGGLE",
             };
         }

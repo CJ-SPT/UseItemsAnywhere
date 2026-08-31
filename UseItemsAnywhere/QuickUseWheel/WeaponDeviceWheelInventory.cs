@@ -47,7 +47,7 @@ internal sealed class WeaponDeviceWheelInventory
 
         for (var index = 0; index < _lights.Count; index++)
         {
-            AddDeviceItem(_lights[index], index + 1);
+            AddDeviceItem(_lights[index]);
         }
     }
 
@@ -129,7 +129,7 @@ internal sealed class WeaponDeviceWheelInventory
             _ui.GetItemIcon(firearm)));
     }
 
-    private void AddDeviceItem(LightComponent light, int ordinal)
+    private void AddDeviceItem(LightComponent light)
     {
         var modeCount = light._template.ModesCount;
         var mode = modeCount > 1
@@ -141,7 +141,7 @@ internal sealed class WeaponDeviceWheelInventory
             _ui.GetItemDisplayName(item, 18),
             _ui.GetItemName(item),
             $"{(light.IsActive ? "ON" : "OFF")}{mode}",
-            $"DEVICE {ordinal}",
+            string.Empty,
             CanChangeState([light]),
             false,
             modeCount > 1,

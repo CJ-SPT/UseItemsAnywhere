@@ -19,7 +19,7 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
     [MenuItem("SDK/R.A.T./Build UI Bundles")]
     internal static void BuildFromMenu() => Build();
 
-    internal static void Build()
+    public static void Build()
     {
         Directory.CreateDirectory(UiFolder);
         CreateCircleSprite(CirclePath);
@@ -76,15 +76,31 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
     private static void CreateCircleSprite(string path)
     {
         const int size = 512;
+        const int samplesPerAxis = 4;
         var texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
         var pixels = new Color32[size * size];
-        var center = (size - 1) * 0.5f;
+        var center = size * 0.5f;
+        var radiusSquared = center * center;
+        var sampleCount = samplesPerAxis * samplesPerAxis;
         for (var y = 0; y < size; y++)
         {
             for (var x = 0; x < size; x++)
             {
-                var distance = Vector2.Distance(new Vector2(x, y), new Vector2(center, center));
-                var alpha = (byte)Mathf.RoundToInt(Mathf.Clamp01(center - distance) * 255f);
+                var coveredSamples = 0;
+                for (var sampleY = 0; sampleY < samplesPerAxis; sampleY++)
+                {
+                    for (var sampleX = 0; sampleX < samplesPerAxis; sampleX++)
+                    {
+                        var offsetX = x + (sampleX + 0.5f) / samplesPerAxis - center;
+                        var offsetY = y + (sampleY + 0.5f) / samplesPerAxis - center;
+                        if (offsetX * offsetX + offsetY * offsetY <= radiusSquared)
+                        {
+                            coveredSamples++;
+                        }
+                    }
+                }
+
+                var alpha = (byte)Mathf.RoundToInt(coveredSamples / (float)sampleCount * 255f);
                 pixels[y * size + x] = new Color32(255, 255, 255, alpha);
             }
         }
@@ -102,6 +118,7 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         importer.mipmapEnabled = false;
         importer.filterMode = FilterMode.Bilinear;
         importer.wrapMode = TextureWrapMode.Clamp;
+        importer.textureCompression = TextureImporterCompression.Uncompressed;
         importer.SaveAndReimport();
     }
 
@@ -145,6 +162,7 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         var canvas = root.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 30000;
+        canvas.pixelPerfect = true;
         var scaler = root.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920f, 1080f);
@@ -162,73 +180,52 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         wheelRoot.anchorMin = wheelRoot.anchorMax = wheelRoot.pivot = new Vector2(0.5f, 0.5f);
 
         var shadow = CreateImage("Shadow", wheelRoot, circle, new Color(0f, 0f, 0f, 0.58f));
-        shadow.rectTransform.sizeDelta = new Vector2(570f, 570f);
+        shadow.rectTransform.sizeDelta = new Vector2(568f, 568f);
 
         var outerFrame = CreateImage("OuterFrame", wheelRoot, circle, new Color(0.3f, 0.32f, 0.32f, 0.9f));
         outerFrame.rectTransform.sizeDelta = new Vector2(558f, 558f);
         var ringBack = CreateImage("RingBack", wheelRoot, circle, new Color(0.025f, 0.027f, 0.027f, 0.97f));
-        ringBack.rectTransform.sizeDelta = new Vector2(554f, 554f);
-        var ringInsetFrame = CreateImage("RingInsetFrame", wheelRoot, circle, new Color(0.12f, 0.13f, 0.13f, 0.82f));
-        ringInsetFrame.rectTransform.sizeDelta = new Vector2(536f, 536f);
-        var ringInset = CreateImage("RingInset", wheelRoot, circle, new Color(0.031f, 0.033f, 0.033f, 0.99f));
-        ringInset.rectTransform.sizeDelta = new Vector2(532f, 532f);
+        ringBack.rectTransform.sizeDelta = new Vector2(552f, 552f);
 
         var segmentLayer = CreateRect("SegmentLayer", wheelRoot, new Vector2(548f, 548f));
-        var segment = CreateImage("SegmentTemplate", segmentLayer, circle, new Color(0.045f, 0.048f, 0.048f, 0.86f));
-        Stretch(segment.rectTransform);
-        segment.type = Image.Type.Filled;
-        segment.fillMethod = Image.FillMethod.Radial360;
-        segment.fillOrigin = (int)Image.Origin360.Top;
-        segment.fillClockwise = true;
-        segment.raycastTarget = false;
+        var segment = CreateRect("SegmentTemplate", segmentLayer, new Vector2(548f, 548f));
+        Stretch(segment);
         segment.gameObject.SetActive(false);
-
-        var indexLayer = CreateRect("IndexLayer", wheelRoot, new Vector2(548f, 548f));
-        for (var index = 0; index < 12; index++)
-        {
-            var major = index % 3 == 0;
-            var tick = CreateImage(
-                $"Index_{index:00}",
-                indexLayer,
-                null,
-                major
-                    ? new Color(0.55f, 0.57f, 0.55f, 0.52f)
-                    : new Color(0.42f, 0.44f, 0.43f, 0.26f));
-            tick.rectTransform.sizeDelta = new Vector2(major ? 2f : 1f, major ? 14f : 8f);
-            var angle = index * 30f * Mathf.Deg2Rad;
-            tick.rectTransform.anchoredPosition = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle))
-                * (major ? 265f : 268f);
-            tick.rectTransform.localEulerAngles = new Vector3(0f, 0f, -index * 30f);
-        }
 
         var itemLayer = CreateRect("ItemLayer", wheelRoot, new Vector2(548f, 548f));
         var itemTemplate = CreateRect("ItemTemplate", itemLayer, new Vector2(132f, 140f));
         var iconFrame = CreateImage("IconFrame", itemTemplate, null, new Color(0.32f, 0.34f, 0.34f, 0.96f));
-        iconFrame.rectTransform.sizeDelta = new Vector2(70f, 70f);
+        iconFrame.rectTransform.sizeDelta = new Vector2(64f, 64f);
         iconFrame.rectTransform.anchoredPosition = new Vector2(0f, 31f);
-        var iconBack = CreateImage("IconBack", itemTemplate, null, new Color(0.055f, 0.058f, 0.058f, 0.98f));
-        iconBack.rectTransform.sizeDelta = new Vector2(68f, 68f);
-        iconBack.rectTransform.anchoredPosition = new Vector2(0f, 31f);
-        var icon = CreateImage("Icon", itemTemplate, null, Color.white);
-        icon.rectTransform.sizeDelta = new Vector2(60f, 60f);
-        icon.rectTransform.anchoredPosition = new Vector2(0f, 31f);
+        var iconBack = CreateImage("IconBack", iconFrame.transform, null, new Color(0.055f, 0.058f, 0.058f, 0.98f));
+        iconBack.rectTransform.sizeDelta = new Vector2(62f, 62f);
+        var icon = CreateImage("Icon", iconFrame.transform, null, Color.white);
+        icon.rectTransform.sizeDelta = new Vector2(56f, 56f);
         icon.preserveAspect = true;
-        var favoriteBadge = CreateImage("FavoriteBadge", itemTemplate, null, new Color(0.72f, 0.74f, 0.74f, 0.96f));
-        favoriteBadge.rectTransform.sizeDelta = new Vector2(31f, 15f);
-        favoriteBadge.rectTransform.anchoredPosition = new Vector2(44f, 59f);
+        var favoriteBadge = CreateImage("FavoriteBadge", iconFrame.transform, null, new Color(0.72f, 0.74f, 0.74f, 0.96f));
+        favoriteBadge.rectTransform.anchorMin = favoriteBadge.rectTransform.anchorMax = new Vector2(1f, 1f);
+        favoriteBadge.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+        favoriteBadge.rectTransform.sizeDelta = new Vector2(29f, 14f);
+        favoriteBadge.rectTransform.anchoredPosition = new Vector2(-3f, -3f);
         var favoriteLabel = CreateText("Label", favoriteBadge.transform, 8f, FontStyles.Bold, new Color(0.06f, 0.07f, 0.07f, 1f));
         favoriteLabel.text = "FAV";
         Stretch(favoriteLabel.rectTransform);
         favoriteBadge.gameObject.SetActive(false);
         var itemName = CreateText("Name", itemTemplate, 15f, FontStyles.Bold, new Color(0.82f, 0.83f, 0.8f, 1f));
         itemName.rectTransform.sizeDelta = new Vector2(132f, 28f);
-        itemName.rectTransform.anchoredPosition = new Vector2(0f, -10f);
+        itemName.rectTransform.anchoredPosition = new Vector2(0f, -15f);
+        itemName.enableAutoSizing = true;
+        itemName.fontSizeMin = 11f;
+        itemName.fontSizeMax = 15f;
         var state = CreateText("State", itemTemplate, 11f, FontStyles.Bold, new Color(0.72f, 0.74f, 0.72f, 1f));
         state.rectTransform.sizeDelta = new Vector2(132f, 20f);
-        state.rectTransform.anchoredPosition = new Vector2(0f, -34f);
+        state.rectTransform.anchoredPosition = new Vector2(0f, -38f);
+        state.enableAutoSizing = true;
+        state.fontSizeMin = 9f;
+        state.fontSizeMax = 11f;
         var source = CreateText("Source", itemTemplate, 10f, FontStyles.Normal, new Color(0.45f, 0.47f, 0.46f, 1f));
         source.rectTransform.sizeDelta = new Vector2(132f, 18f);
-        source.rectTransform.anchoredPosition = new Vector2(0f, -54f);
+        source.rectTransform.anchoredPosition = new Vector2(0f, -57f);
         itemTemplate.gameObject.SetActive(false);
 
         var centerShadow = CreateImage("CenterShadow", wheelRoot, circle, new Color(0f, 0f, 0f, 0.78f));
@@ -238,25 +235,26 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         var center = CreateImage("Center", wheelRoot, circle, new Color(0.018f, 0.02f, 0.02f, 0.99f));
         center.rectTransform.sizeDelta = new Vector2(202f, 202f);
         var centerHeader = CreateImage("CenterHeader", center.transform, null, new Color(0.13f, 0.15f, 0.16f, 1f));
-        centerHeader.rectTransform.sizeDelta = new Vector2(110f, 19f);
+        centerHeader.rectTransform.sizeDelta = new Vector2(140f, 20f);
         centerHeader.rectTransform.anchoredPosition = new Vector2(0f, 69f);
         var centerHeaderText = CreateText("CenterHeaderText", centerHeader.transform, 9f, FontStyles.Bold, new Color(0.72f, 0.74f, 0.74f, 1f));
         centerHeaderText.text = "QUICK USE";
         Stretch(centerHeaderText.rectTransform);
         var centerRule = CreateImage("CenterRule", center.transform, null, new Color(0.32f, 0.34f, 0.34f, 1f));
         centerRule.rectTransform.sizeDelta = new Vector2(122f, 1f);
-        centerRule.rectTransform.anchoredPosition = new Vector2(0f, -20f);
+        centerRule.rectTransform.anchoredPosition = new Vector2(0f, -18f);
         var selectedName = CreateText("SelectedName", center.transform, 17f, FontStyles.Normal, new Color(0.86f, 0.87f, 0.83f, 1f));
-        selectedName.rectTransform.sizeDelta = new Vector2(154f, 72f);
-        selectedName.rectTransform.anchoredPosition = new Vector2(0f, 13f);
+        selectedName.rectTransform.sizeDelta = new Vector2(160f, 50f);
+        selectedName.rectTransform.anchoredPosition = new Vector2(0f, 18f);
         selectedName.enableWordWrapping = true;
         selectedName.enableAutoSizing = true;
         selectedName.fontSizeMin = 12f;
         selectedName.fontSizeMax = 17f;
         var cancelHint = CreateText("CancelHint", center.transform, 10f, FontStyles.Normal, new Color(0.48f, 0.5f, 0.49f, 1f));
         cancelHint.text = "CENTER TO CANCEL";
-        cancelHint.rectTransform.sizeDelta = new Vector2(150f, 26f);
-        cancelHint.rectTransform.anchoredPosition = new Vector2(0f, -50f);
+        cancelHint.rectTransform.sizeDelta = new Vector2(168f, 32f);
+        cancelHint.rectTransform.anchoredPosition = new Vector2(0f, -49f);
+        cancelHint.enableWordWrapping = true;
 
         var pageHint = CreateText("PageHint", root.transform, 12f, FontStyles.Normal, new Color(0.64f, 0.66f, 0.65f, 1f));
         pageHint.rectTransform.anchorMin = pageHint.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
@@ -264,7 +262,7 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         pageHint.rectTransform.anchoredPosition = new Vector2(0f, -325f);
         pageHint.gameObject.SetActive(false);
 
-        var controls = CreateText("Controls", root.transform, 11f, FontStyles.Normal, new Color(0.42f, 0.44f, 0.43f, 1f));
+        var controls = CreateText("Controls", root.transform, 11f, FontStyles.Normal, new Color(0.52f, 0.54f, 0.53f, 1f));
         controls.text = "RELEASE TO USE   •   MMB FAVORITE   •   ESC / RIGHT CLICK TO CANCEL";
         controls.rectTransform.anchorMin = controls.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
         controls.rectTransform.sizeDelta = new Vector2(660f, 28f);
