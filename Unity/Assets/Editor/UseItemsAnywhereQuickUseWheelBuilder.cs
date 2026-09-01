@@ -215,8 +215,10 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         itemName.rectTransform.sizeDelta = new Vector2(132f, 24f);
         itemName.rectTransform.anchoredPosition = new Vector2(0f, -14f);
         itemName.enableAutoSizing = true;
-        itemName.fontSizeMin = 11f;
+        itemName.fontSizeMin = 9f;
         itemName.fontSizeMax = 15f;
+        itemName.enableWordWrapping = false;
+        itemName.overflowMode = TextOverflowModes.Ellipsis;
         var state = CreateText("State", itemTemplate, 11f, FontStyles.Bold, new Color(0.72f, 0.74f, 0.72f, 1f));
         state.rectTransform.sizeDelta = new Vector2(132f, 18f);
         state.rectTransform.anchoredPosition = new Vector2(0f, -35f);
@@ -226,6 +228,11 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         var source = CreateText("Source", itemTemplate, 10f, FontStyles.Normal, new Color(0.45f, 0.47f, 0.46f, 1f));
         source.rectTransform.sizeDelta = new Vector2(132f, 16f);
         source.rectTransform.anchoredPosition = new Vector2(0f, -52f);
+        source.enableAutoSizing = true;
+        source.fontSizeMin = 7f;
+        source.fontSizeMax = 10f;
+        source.enableWordWrapping = false;
+        source.overflowMode = TextOverflowModes.Ellipsis;
         itemTemplate.gameObject.SetActive(false);
 
         var centerShadow = CreateImage("CenterShadow", wheelRoot, circle, new Color(0f, 0f, 0f, 0.78f));
@@ -252,9 +259,57 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         selectedName.fontSizeMax = 17f;
         var cancelHint = CreateText("CancelHint", center.transform, 10f, FontStyles.Normal, new Color(0.48f, 0.5f, 0.49f, 1f));
         cancelHint.text = "CENTER TO CANCEL";
-        cancelHint.rectTransform.sizeDelta = new Vector2(168f, 32f);
-        cancelHint.rectTransform.anchoredPosition = new Vector2(0f, -49f);
+        cancelHint.rectTransform.sizeDelta = new Vector2(176f, 45f);
+        cancelHint.rectTransform.anchoredPosition = new Vector2(0f, -47f);
         cancelHint.enableWordWrapping = true;
+        cancelHint.enableAutoSizing = true;
+        cancelHint.fontSizeMin = 7f;
+        cancelHint.fontSizeMax = 10f;
+
+        var detailsShadow = CreateImage("DetailsShadow", root.transform, null, new Color(0f, 0f, 0f, 0.62f));
+        detailsShadow.rectTransform.sizeDelta = new Vector2(346f, 216f);
+        detailsShadow.rectTransform.anchoredPosition = new Vector2(463f, 17f);
+        detailsShadow.gameObject.SetActive(false);
+        var detailsPanel = CreateImage("DetailsPanel", root.transform, null, new Color(0.32f, 0.34f, 0.34f, 0.98f));
+        detailsPanel.rectTransform.sizeDelta = new Vector2(340f, 210f);
+        detailsPanel.rectTransform.anchoredPosition = new Vector2(460f, 20f);
+        var detailsBackground = CreateImage("Background", detailsPanel.transform, null, new Color(0.025f, 0.027f, 0.027f, 0.99f));
+        detailsBackground.rectTransform.sizeDelta = new Vector2(336f, 206f);
+        var detailsHeader = CreateImage("Header", detailsPanel.transform, null, new Color(0.13f, 0.15f, 0.16f, 1f));
+        detailsHeader.rectTransform.sizeDelta = new Vector2(336f, 24f);
+        detailsHeader.rectTransform.anchoredPosition = new Vector2(0f, 91f);
+        var detailsHeaderText = CreateText("Label", detailsHeader.transform, 10f, FontStyles.Bold, new Color(0.72f, 0.74f, 0.74f, 1f));
+        detailsHeaderText.text = "SELECTED ITEM";
+        detailsHeaderText.alignment = TextAlignmentOptions.Left;
+        detailsHeaderText.rectTransform.sizeDelta = new Vector2(304f, 24f);
+        var detailsName = CreateText("Name", detailsPanel.transform, 18f, FontStyles.Normal, new Color(0.86f, 0.87f, 0.83f, 1f));
+        detailsName.text = "ITEM NAME";
+        detailsName.alignment = TextAlignmentOptions.Left;
+        detailsName.rectTransform.sizeDelta = new Vector2(304f, 40f);
+        detailsName.rectTransform.anchoredPosition = new Vector2(0f, 56f);
+        detailsName.enableWordWrapping = true;
+        detailsName.enableAutoSizing = true;
+        detailsName.fontSizeMin = 13f;
+        detailsName.fontSizeMax = 18f;
+        var detailsBody = CreateText("Body", detailsPanel.transform, 11f, FontStyles.Normal, new Color(0.58f, 0.6f, 0.59f, 1f));
+        detailsBody.text = "STATUS\nSOURCE\nACCESS DETAILS";
+        detailsBody.alignment = TextAlignmentOptions.TopLeft;
+        detailsBody.rectTransform.sizeDelta = new Vector2(304f, 70f);
+        detailsBody.rectTransform.anchoredPosition = new Vector2(0f, -9f);
+        detailsBody.enableWordWrapping = true;
+        detailsBody.enableAutoSizing = true;
+        detailsBody.fontSizeMin = 8f;
+        detailsBody.fontSizeMax = 11f;
+        var detailsRule = CreateImage("Rule", detailsPanel.transform, null, new Color(0.28f, 0.3f, 0.3f, 1f));
+        detailsRule.rectTransform.sizeDelta = new Vector2(304f, 1f);
+        detailsRule.rectTransform.anchoredPosition = new Vector2(0f, -58f);
+        var detailsAction = CreateText("Action", detailsPanel.transform, 10f, FontStyles.Bold, new Color(0.72f, 0.74f, 0.72f, 1f));
+        detailsAction.text = "RELEASE TO USE";
+        detailsAction.alignment = TextAlignmentOptions.Left;
+        detailsAction.rectTransform.sizeDelta = new Vector2(304f, 30f);
+        detailsAction.rectTransform.anchoredPosition = new Vector2(0f, -78f);
+        detailsAction.enableWordWrapping = true;
+        detailsPanel.gameObject.SetActive(false);
 
         var pageHint = CreateText("PageHint", root.transform, 12f, FontStyles.Normal, new Color(0.64f, 0.66f, 0.65f, 1f));
         pageHint.rectTransform.anchorMin = pageHint.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
@@ -364,8 +419,12 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
 
         var cancelHint = CreateText("CancelHint", timerRoot, 9f, FontStyles.Normal, new Color(0.42f, 0.44f, 0.43f, 1f));
         cancelHint.text = "PRESS KEY TO CANCEL";
-        cancelHint.rectTransform.sizeDelta = new Vector2(350f, 18f);
-        cancelHint.rectTransform.anchoredPosition = new Vector2(48f, -45f);
+        cancelHint.rectTransform.sizeDelta = new Vector2(350f, 34f);
+        cancelHint.rectTransform.anchoredPosition = new Vector2(48f, -44f);
+        cancelHint.enableWordWrapping = true;
+        cancelHint.enableAutoSizing = true;
+        cancelHint.fontSizeMin = 7f;
+        cancelHint.fontSizeMax = 9f;
 
         root.SetActive(false);
         PrefabUtility.SaveAsPrefabAsset(root, TimerPrefabPath);

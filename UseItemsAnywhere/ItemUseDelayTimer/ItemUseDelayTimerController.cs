@@ -22,7 +22,8 @@ internal sealed class ItemUseDelayTimerController
     internal ItemUseDelayPresentation? Begin(
         Player player,
         Item item,
-        Configuration.ItemAccessDelayInfo delayInfo)
+        Configuration.ItemAccessDelayInfo delayInfo,
+        Item? queuedItem = null)
     {
         if (!_view.IsAvailable || !IsCurrentLocalPlayer(player))
         {
@@ -34,8 +35,40 @@ internal sealed class ItemUseDelayTimerController
         _activePresentationId = presentationId;
         _player = player;
         _ui.SetItemCachePlayer(player);
-        _view.Show(item, delayInfo);
+        _view.Show(item, delayInfo, queuedItem);
         return new ItemUseDelayPresentation(this, presentationId);
+    }
+
+    internal void SetQueuedItem(Player player, Item? queuedItem)
+    {
+        if (_view.IsVisible && ReferenceEquals(_player, player))
+        {
+            _view.SetQueuedItem(queuedItem);
+        }
+    }
+
+    internal void ShowWaitingForCurrentUse(Player player, Item currentItem, Item? queuedItem)
+    {
+        if (!Configuration.ShowTimerPanel.Value
+            || !_view.IsAvailable
+            || !IsCurrentLocalPlayer(player)
+            || queuedItem is null)
+        {
+            return;
+        }
+
+        HideImmediately();
+        _player = player;
+        _ui.SetItemCachePlayer(player);
+        _view.ShowWaitingForCurrentUse(currentItem, queuedItem);
+    }
+
+    internal void EndWaitingForCurrentUse(Player player)
+    {
+        if (_activePresentationId == 0 && ReferenceEquals(_player, player))
+        {
+            HideImmediately();
+        }
     }
 
     internal void Update()

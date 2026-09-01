@@ -451,7 +451,7 @@ public static class Configuration
             "Clear Item Access Delay",
             KeyboardShortcut.Empty,
             new ConfigDescription(
-                "Key used to cancel the currently queued item use and clear its access delay.",
+                "Key used to cancel the current pending access and clear the next queued item.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 

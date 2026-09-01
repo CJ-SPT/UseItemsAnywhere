@@ -298,7 +298,9 @@ internal sealed class QuickUseWheelController
             return;
         }
 
-        if (player.IsInventoryOpened || !player.HealthController.IsAlive)
+        if (player.IsInventoryOpened
+            || player.HealthController is null
+            || !player.HealthController.IsAlive)
         {
 #if DEBUG
             _logger?.LogDebug("Quick-use wheel was suppressed by the current player state.");
@@ -326,7 +328,15 @@ internal sealed class QuickUseWheelController
         _pendingItemOnOpen = mode == WheelMode.Items && hasPendingAccess ? pendingItem : null;
         _openedFromPendingRequest = mode == WheelMode.Items && openedFromPendingRequest && hasPendingAccess;
         _pendingClickArmed = false;
-        PopulateEntries();
+        if (!PopulateEntries())
+        {
+            _player = null;
+            _playerOwner = null;
+            _inventory.ClearItems();
+            _deviceInventory.Clear();
+            PlaySound(EUISoundType.MenuEscape);
+            return;
+        }
         if (mode == WheelMode.WeaponDevices && _entries.Count == 0)
         {
             _player = null;
@@ -371,7 +381,11 @@ internal sealed class QuickUseWheelController
         }
 
         _nextWheelRefreshTime = Time.unscaledTime + WheelRefreshInterval;
-        PopulateEntries();
+        if (!PopulateEntries())
+        {
+            Close(false);
+            return;
+        }
         _page = Mathf.Clamp(_page, 0, PageCount - 1);
         RefreshWheel();
 
@@ -386,17 +400,20 @@ internal sealed class QuickUseWheelController
 #endif
     }
 
-    private void PopulateEntries()
+    private bool PopulateEntries()
     {
         _entries.Clear();
         if (_player is null || !_player)
         {
-            return;
+            return false;
         }
 
         if (_mode == WheelMode.Items)
         {
-            _inventory.Populate(_player);
+            if (!_inventory.Populate(_player))
+            {
+                return false;
+            }
             foreach (var item in _inventory.Items)
             {
                 _entries.Add(new QuickUseWheelEntry(
@@ -407,11 +424,11 @@ internal sealed class QuickUseWheelController
                     item.IsUsable,
                     item.IsQueued,
                     item.IsFavorite,
-                    item.IsQueued || item.IsGrouped || Configuration.QuickUseShowItemState.Value,
+                    item.IsQueued || item.IsGrouped || item.DelayInfo.HasValue || Configuration.QuickUseShowItemState.Value,
                     Configuration.QuickUseShowSourceSlot.Value,
                     item.Icon));
             }
-            return;
+            return true;
         }
 
         _deviceInventory.Populate(_player);
@@ -429,6 +446,7 @@ internal sealed class QuickUseWheelController
                 !string.IsNullOrEmpty(device.SourceName),
                 device.Icon));
         }
+        return true;
     }
 
     private void Close(bool useSelection)
@@ -556,7 +574,11 @@ internal sealed class QuickUseWheelController
         if (!succeeded)
         {
             PlaySound(EUISoundType.MenuEscape);
-            PopulateEntries();
+            if (!PopulateEntries())
+            {
+                Close(false);
+                return;
+            }
             RefreshWheel();
             return;
         }
@@ -566,7 +588,11 @@ internal sealed class QuickUseWheelController
             _player.PlayTacticalSound();
         }
         PlaySound(fireModeAction || cycleMode ? EUISoundType.MenuDropdownSelect : EUISoundType.ButtonClick);
-        PopulateEntries();
+        if (!PopulateEntries())
+        {
+            Close(false);
+            return;
+        }
         _page = Mathf.Clamp(_page, 0, PageCount - 1);
         RefreshWheel();
     }
@@ -643,14 +669,25 @@ internal sealed class QuickUseWheelController
                 _ => "UNKNOWN",
             };
         var controls = _openedFromPendingRequest
-            ? "LMB CONFIRM   •   MMB FAVORITE   •   ESC / RIGHT CLICK TO CLOSE"
-            : "RELEASE TO USE   •   MMB FAVORITE   •   ESC / RIGHT CLICK TO CANCEL";
+            ? "LMB CONFIRM   •   MMB FAVORITE / REMOVE NEXT   •   ESC / RIGHT CLICK TO CLOSE"
+            : "RELEASE TO USE   •   MMB FAVORITE / REMOVE NEXT   •   ESC / RIGHT CLICK TO CANCEL";
+        var status = $"PENDING: {pendingMode}   •   GROUP: {groupingMode}";
+        if (_player is not null
+            && _player
+            && ItemAccessDelayPatch.TryGetQueueState(_player, out var queueState))
+        {
+            var currentName = _ui.GetItemDisplayName(queueState.CurrentItem, 16).ToUpperInvariant();
+            var nextName = queueState.NextItem is null
+                ? "NONE"
+                : _ui.GetItemDisplayName(queueState.NextItem, 16).ToUpperInvariant();
+            status = $"CURRENT: {currentName}   •   NEXT: {nextName}";
+        }
         return new QuickUseWheelViewState(
             "QUICK USE",
             "NO ITEMS\nAVAILABLE",
             "CHECK YOUR LOADOUT",
             controls,
-            $"PENDING: {pendingMode}   •   GROUP: {groupingMode}");
+            status);
     }
 
     private void UpdatePresentation()
@@ -662,7 +699,36 @@ internal sealed class QuickUseWheelController
             _pageItemCount,
             _selectedIndex,
             selectedItem,
-            GetSelectionHint(selectedItem));
+            GetSelectionHint(selectedItem),
+            GetSelectionDetail(selectedItem));
+    }
+
+    private string GetSelectionDetail(QuickUseWheelEntry? selectedEntry)
+    {
+        if (!selectedEntry.HasValue)
+        {
+            return string.Empty;
+        }
+
+        var selectedItem = GetSelectedItem();
+        var details = new List<string>();
+        if (!string.IsNullOrEmpty(selectedEntry.Value.State))
+        {
+            details.Add($"STATUS  {selectedEntry.Value.State}");
+        }
+        if (selectedItem is { DelayInfo: { } delayInfo })
+        {
+            details.Add(ItemAccessDelayText.FormatWheelSelection(delayInfo));
+        }
+        else if (!string.IsNullOrEmpty(selectedEntry.Value.SourceName))
+        {
+            details.Add($"SOURCE  {selectedEntry.Value.SourceName.ToUpperInvariant()}");
+        }
+        if (selectedEntry.Value.IsFavorite)
+        {
+            details.Add("FAVORITE ITEM");
+        }
+        return string.Join("\n", details);
     }
 
     private string GetSelectionHint(QuickUseWheelEntry? selectedEntry)
@@ -689,9 +755,16 @@ internal sealed class QuickUseWheelController
         }
 
         var selectedItem = GetSelectedItem();
+        string actionHint;
+        if (selectedItem is { IsNextQueued: true })
+        {
+            actionHint = "MMB: REMOVE NEXT ITEM";
+            return actionHint;
+        }
         if (selectedEntry is { IsQueued: true })
         {
-            return "QUEUED  •  WAITING FOR ACCESS";
+            actionHint = "CURRENT ITEM  •  ACCESS IN PROGRESS";
+            return actionHint;
         }
 
         if (_openedFromPendingRequest)
@@ -704,7 +777,8 @@ internal sealed class QuickUseWheelController
             {
                 return "CURRENTLY PENDING  •  LMB: KEEP";
             }
-            return selectedEntry.Value.IsUsable ? "LMB: REPLACE" : "ITEM UNAVAILABLE";
+            actionHint = selectedEntry.Value.IsUsable ? "LMB: REPLACE" : "ITEM UNAVAILABLE";
+            return actionHint;
         }
 
         if (selectedEntry is { IsUsable: false })
@@ -721,11 +795,13 @@ internal sealed class QuickUseWheelController
             {
                 return "CURRENTLY PENDING";
             }
-            return Configuration.PendingItemUseBehavior.Value == Configuration.PendingUseMode.QueueOne
+            actionHint = Configuration.PendingItemUseBehavior.Value == Configuration.PendingUseMode.QueueOne
                 ? "RELEASE TO QUEUE"
                 : "RELEASE TO REPLACE";
+            return actionHint;
         }
-        return selectedEntry.Value.IsFavorite ? "MMB: UNFAVORITE" : "MMB: FAVORITE";
+        actionHint = selectedEntry.Value.IsFavorite ? "MMB: UNFAVORITE" : "MMB: FAVORITE";
+        return actionHint;
     }
 
     private void ToggleSelectedFavorite()
@@ -736,9 +812,33 @@ internal sealed class QuickUseWheelController
             return;
         }
 
+        if (selectedItem.Value.IsNextQueued)
+        {
+            if (_player is not null && _player && ItemAccessDelayPatch.RemoveNextQueuedItem(_player))
+            {
+                PlaySound(EUISoundType.MenuEscape);
+                if (!PopulateEntries())
+                {
+                    Close(false);
+                    return;
+                }
+                RefreshWheel();
+            }
+            return;
+        }
+
+        if (selectedItem.Value.IsQueued)
+        {
+            return;
+        }
+
         _inventory.ToggleFavorite(selectedItem.Value);
         PlaySound(EUISoundType.MenuCheckBox);
-        PopulateEntries();
+        if (!PopulateEntries())
+        {
+            Close(false);
+            return;
+        }
         RefreshWheel();
     }
 
@@ -776,9 +876,7 @@ internal sealed class QuickUseWheelController
         }
         var slice = QuickUseWheelGeometry.GetSliceDegrees(_pageItemCount);
         var candidateIndex = Mathf.FloorToInt((degrees + slice * 0.5f) / slice) % _pageItemCount;
-        _selectedIndex = !GetPageEntry(candidateIndex).IsQueued
-            ? candidateIndex
-            : -1;
+        _selectedIndex = candidateIndex;
     }
 
     private QuickUseWheelEntry? GetSelectedEntry()
@@ -824,6 +922,7 @@ internal sealed class QuickUseWheelController
             && _player
             && _playerOwner is not null
             && _playerOwner
+            && _player.HealthController is not null
             && _player.HealthController.IsAlive
             && !_player.IsInventoryOpened;
     }

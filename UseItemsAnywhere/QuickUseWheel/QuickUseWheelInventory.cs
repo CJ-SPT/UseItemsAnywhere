@@ -68,129 +68,151 @@ internal sealed class QuickUseWheelInventory
         }
     }
 
-    internal void Populate(Player player)
+    internal bool Populate(Player player)
     {
         _items.Clear();
+        ClearWorkingSets();
+        if (player is null || !player)
+        {
+            return false;
+        }
+
         var controller = player.InventoryController;
+        if (controller is null)
+        {
+            return false;
+        }
+
         var inventory = controller.Inventory;
+        if (inventory is null)
+        {
+            return false;
+        }
+
         _ui.SetItemCachePlayer(player);
-        _candidateItems.Clear();
-        _seenItems.Clear();
-        _sourceSlots.Clear();
-        _groupedCandidates.Clear();
-
-        for (var slotIndex = 0; slotIndex < SlotPriority.Length; slotIndex++)
+        try
         {
-            foreach (var item in inventory.GetItemsInSlots(SourceSlotQueries[slotIndex]))
+            for (var slotIndex = 0; slotIndex < SlotPriority.Length; slotIndex++)
             {
-                if (item is not null && !_sourceSlots.ContainsKey(item))
+                foreach (var item in inventory.GetItemsInSlots(SourceSlotQueries[slotIndex]))
                 {
-                    _sourceSlots.Add(item, SlotPriority[slotIndex]);
+                    if (item is not null && !_sourceSlots.ContainsKey(item))
+                    {
+                        _sourceSlots.Add(item, SlotPriority[slotIndex]);
+                    }
                 }
             }
-        }
 
-        // Separate iterators so each category respects its configured source slots.
-        if (Configuration.QuickUseShowPrimAndSecWeapons.Value)
-        {
-            foreach (var item in inventory.GetItemsInSlots(Configuration.AllAllowedWeaponSlots))
+            // Separate iterators so each category respects its configured source slots.
+            if (Configuration.QuickUseShowPrimAndSecWeapons.Value)
             {
-                if (item is Weapon && _seenItems.Add(item))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.AllAllowedWeaponSlots))
                 {
-                    _candidateItems.Add(item);
+                    if (item is Weapon && _seenItems.Add(item))
+                    {
+                        _candidateItems.Add(item);
+                    }
                 }
             }
-        }
 
-        if (Configuration.QuickUseShowMelee.Value)
-        {
-            foreach (var item in inventory.GetItemsInSlots(Configuration.AllAllowedMeleeSlots))
+            if (Configuration.QuickUseShowMelee.Value)
             {
-                if (item.GetItemComponent<KnifeComponent>() != null && _seenItems.Add(item))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.AllAllowedMeleeSlots))
                 {
-                    _candidateItems.Add(item);
+                    if (item is not null
+                        && item.GetItemComponent<KnifeComponent>() != null
+                        && _seenItems.Add(item))
+                    {
+                        _candidateItems.Add(item);
+                    }
                 }
             }
-        }
-        
-        if (Configuration.QuickUseShowGrenades.Value)
-        {
-            foreach (var item in inventory.GetItemsInSlots(Configuration.GrenadeThrowSlots.Value))
+
+            if (Configuration.QuickUseShowGrenades.Value)
             {
-                if (item is ThrowWeap && _seenItems.Add(item))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.GrenadeThrowSlots.Value))
                 {
-                    _candidateItems.Add(item);
+                    if (item is ThrowWeap && _seenItems.Add(item))
+                    {
+                        _candidateItems.Add(item);
+                    }
                 }
             }
-        }
 
-        if (Configuration.QuickUseShowMeds.Value)
-        {
-            foreach (var item in inventory.GetItemsInSlots(Configuration.MedsSlots.Value))
+            if (Configuration.QuickUseShowMeds.Value)
             {
-                if (item is Meds && _seenItems.Add(item))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.MedsSlots.Value))
                 {
-                    _candidateItems.Add(item);
+                    if (item is Meds && _seenItems.Add(item))
+                    {
+                        _candidateItems.Add(item);
+                    }
                 }
             }
-        }
 
-        if (Configuration.QuickUseShowFoodDrink.Value)
-        {
-            foreach (var item in inventory.GetItemsInSlots(Configuration.FoodDrinkSlots.Value))
+            if (Configuration.QuickUseShowFoodDrink.Value)
             {
-                if (item is FoodDrink && _seenItems.Add(item))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.FoodDrinkSlots.Value))
                 {
-                    _candidateItems.Add(item);
+                    if (item is FoodDrink && _seenItems.Add(item))
+                    {
+                        _candidateItems.Add(item);
+                    }
                 }
             }
-        }
 
-        if (Configuration.QuickUseShowFlares.Value)
-        {
-            foreach (var item in inventory.GetItemsInSlots(Configuration.FlareSlots.Value))
+            if (Configuration.QuickUseShowFlares.Value)
             {
-                if (item is not null
-                    && Configuration.FlareIds.Contains(item.TemplateId)
-                    && _seenItems.Add(item))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.FlareSlots.Value))
                 {
-                    _candidateItems.Add(item);
+                    if (item is not null
+                        && Configuration.FlareIds.Contains(item.TemplateId)
+                        && _seenItems.Add(item))
+                    {
+                        _candidateItems.Add(item);
+                    }
                 }
             }
-        }
 
-        foreach (var item in _candidateItems)
-        {
-            if (!controller.Examined(item))
+            foreach (var item in _candidateItems)
             {
-                continue;
-            }
-
-            if (Configuration.QuickUseGroupIdenticalItems.Value && IsGroupable(item))
-            {
-                var templateId = item.TemplateId.ToString();
-                if (!_groupedCandidates.TryGetValue(templateId, out var group))
+                if (!controller.Examined(item))
                 {
-                    group = [];
-                    _groupedCandidates.Add(templateId, group);
+                    continue;
                 }
-                group.Add(item);
-                continue;
+
+                if (Configuration.QuickUseGroupIdenticalItems.Value
+                    && IsGroupable(item)
+                    && !ItemAccessDelayPatch.IsQueuedForAccess(player, item))
+                {
+                    var templateId = item.TemplateId.ToString();
+                    if (!_groupedCandidates.TryGetValue(templateId, out var group))
+                    {
+                        group = [];
+                        _groupedCandidates.Add(templateId, group);
+                    }
+                    group.Add(item);
+                    continue;
+                }
+
+                AddWheelItem(player, [item]);
             }
 
-            AddWheelItem(player, [item]);
-        }
+            foreach (var group in _groupedCandidates.Values)
+            {
+                if (group.Count > 0)
+                {
+                    AddWheelItem(player, group);
+                }
+            }
 
-        foreach (var group in _groupedCandidates.Values)
+            _items.Sort(CompareWheelItems);
+            return true;
+        }
+        finally
         {
-            AddWheelItem(player, group);
+            ClearWorkingSets();
         }
-
-        _items.Sort(CompareWheelItems);
-        _candidateItems.Clear();
-        _seenItems.Clear();
-        _sourceSlots.Clear();
-        _groupedCandidates.Clear();
     }
 
     internal void ClearItems()
@@ -228,10 +250,20 @@ internal sealed class QuickUseWheelInventory
 
     internal static bool IsItemStillUsable(Player player, Item item)
     {
+        if (player is null
+            || !player
+            || item is null
+            || player.HealthController is null
+            || player.InventoryController is null
+            || player.InventoryController.Inventory is null)
+        {
+            return false;
+        }
+
         return player.HealthController.IsAlive
             && PlayerOwnsItem(player, item)
             && player.InventoryController.Examined(item)
-            && player.InventoryController.IsAtReachablePlace(item)
+            && IsAtReachablePlace(player, item)
             && item.CheckAction(null).Succeeded
             && HasResource(item);
     }
@@ -256,7 +288,10 @@ internal sealed class QuickUseWheelInventory
 
     internal Item? ResolveItemForTemplate(Player player, string templateId)
     {
-        Populate(player);
+        if (!Populate(player))
+        {
+            return null;
+        }
         try
         {
             Item? selectedItem = null;
@@ -289,14 +324,20 @@ internal sealed class QuickUseWheelInventory
     {
         var item = SelectRepresentativeItem(player, groupedItems);
         var isQueued = ItemAccessDelayPatch.IsQueuedForAccess(player, item);
+        var isNextQueued = ItemAccessDelayPatch.IsNextQueuedItem(player, item);
+        Configuration.ItemAccessDelayInfo? delayInfo = null;
+        if (ItemAccessDelayPatch.TryGetEffectiveDelay(player, item, out var effectiveDelay))
+        {
+            delayInfo = effectiveDelay;
+        }
         var hasResource = HasResource(item);
         var isUsable = !isQueued
             && hasResource
-            && player.InventoryController.IsAtReachablePlace(item)
+            && IsAtReachablePlace(player, item)
             && item.CheckAction(null).Succeeded;
         var quantity = GetCombinedQuantity(groupedItems);
         var state = isQueued
-            ? "QUEUED"
+            ? isNextQueued ? "NEXT" : "ACCESSING"
             : !hasResource
                 ? "EMPTY"
                 : !isUsable ? "UNAVAILABLE" : GetItemState(item, groupedItems.Count == 1);
@@ -313,8 +354,10 @@ internal sealed class QuickUseWheelInventory
             _ui.GetItemDisplayName(item, 18),
             _ui.GetItemName(item),
             state,
+            delayInfo,
             isUsable,
             isQueued,
+            isNextQueued,
             _favoriteTemplateIds.Contains(item.TemplateId.ToString()),
             sourceSlot,
             RuntimeUiService.GetSlotName(sourceSlot),
@@ -349,7 +392,7 @@ internal sealed class QuickUseWheelInventory
         {
             return 3;
         }
-        return player.InventoryController.IsAtReachablePlace(item)
+        return IsAtReachablePlace(player, item)
             && item.CheckAction(null).Succeeded
                 ? 0
                 : 2;
@@ -372,8 +415,7 @@ internal sealed class QuickUseWheelInventory
 
     private static float GetAccessDelay(Player player, Item item)
     {
-        return Configuration.EnableSlotDelays.Value
-            && Configuration.TryGetItemAccessDelay(player.InventoryController.Inventory, item, out var delayInfo)
+        return ItemAccessDelayPatch.TryGetEffectiveDelay(player, item, out var delayInfo)
                 ? delayInfo.TotalDelay
                 : 0f;
     }
@@ -439,7 +481,13 @@ internal sealed class QuickUseWheelInventory
 
     private static bool PlayerOwnsItem(Player player, Item item)
     {
-        foreach (var ownedItem in player.InventoryController.Inventory.AllRealPlayerItems)
+        var inventory = player.InventoryController?.Inventory;
+        if (inventory is null)
+        {
+            return false;
+        }
+
+        foreach (var ownedItem in inventory.AllRealPlayerItems)
         {
             if (ReferenceEquals(ownedItem, item))
             {
@@ -447,6 +495,28 @@ internal sealed class QuickUseWheelInventory
             }
         }
         return false;
+    }
+
+    private static bool IsAtReachablePlace(Player player, Item item)
+    {
+        var controller = player.InventoryController;
+        if (controller is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return controller.IsAtReachablePlace(item);
+        }
+        catch (NullReferenceException)
+        {
+            // Pack 'n Strap patches IsAtReachablePlace and can throw while walking
+            // modded top-level equipment. Wheel candidates have already been found
+            // through explicitly allowed player inventory slots, so retain the
+            // original slot-based behavior when that external reachability check fails.
+            return true;
+        }
     }
 
     private static bool HasResource(Item item)
@@ -520,6 +590,14 @@ internal sealed class QuickUseWheelInventory
             return second;
         }
         return string.IsNullOrEmpty(second) ? first : $"{first} • {second}";
+    }
+
+    private void ClearWorkingSets()
+    {
+        _candidateItems.Clear();
+        _seenItems.Clear();
+        _sourceSlots.Clear();
+        _groupedCandidates.Clear();
     }
 
 }

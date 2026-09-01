@@ -42,7 +42,7 @@ internal sealed class ItemUseDelayTimerView
             BindPrefab);
     }
 
-    internal void Show(Item item, Configuration.ItemAccessDelayInfo delayInfo)
+    internal void Show(Item item, Configuration.ItemAccessDelayInfo delayInfo, Item? queuedItem)
     {
         if (_document?.IsAvailable != true || _ui is null)
         {
@@ -53,8 +53,8 @@ internal sealed class ItemUseDelayTimerView
         _itemName!.text = _ui.GetItemName(item);
         _remainingTime!.text = $"{delayInfo.TotalDelay:0.0}s";
         _statusText!.text = $"ACCESSING ITEM  •  {RuntimeUiService.GetSlotName(delayInfo.SourceSlot)}";
-        _detailText!.text = GetDelayDetail(delayInfo);
-        SetCancelHint();
+        _detailText!.text = ItemAccessDelayText.FormatTimerDetail(delayInfo);
+        SetQueuedItem(queuedItem);
         _progressFill!.rectTransform.anchorMax = Vector2.one;
         _itemIcon = _ui.GetItemIcon(item);
         _icon!.sprite = _itemIcon?.Sprite;
@@ -62,6 +62,49 @@ internal sealed class ItemUseDelayTimerView
         _document.Show();
         _transition!.BeginEntrance(0.94f);
         _visible = true;
+    }
+
+    internal void ShowWaitingForCurrentUse(Item currentItem, Item queuedItem)
+    {
+        if (_document?.IsAvailable != true || _ui is null)
+        {
+            return;
+        }
+
+        _duration = 1f;
+        _itemName!.text = _ui.GetItemName(currentItem);
+        _remainingTime!.text = "IN USE";
+        _statusText!.text = "CURRENT ITEM  •  NEXT ITEM QUEUED";
+        _detailText!.text = "THE NEXT ITEM WILL START AFTER THE CURRENT USE FINISHES";
+        _progressFill!.rectTransform.anchorMax = new Vector2(0f, 1f);
+        _itemIcon = _ui.GetItemIcon(currentItem);
+        _icon!.sprite = _itemIcon?.Sprite;
+        _icon.enabled = _icon.sprite;
+        SetQueuedItem(queuedItem);
+        _document.Show();
+        _transition!.BeginEntrance(0.94f);
+        _visible = true;
+    }
+
+    internal void SetQueuedItem(Item? queuedItem)
+    {
+        if (_cancelHint is null || _ui is null)
+        {
+            return;
+        }
+
+        var shortcut = Configuration.ClearItemAccessDelay.Value;
+        var hasShortcut = shortcut.MainKey != KeyCode.None;
+        var cancelText = hasShortcut
+            ? $"PRESS {shortcut.ToString().ToUpperInvariant()} TO CANCEL"
+            : string.Empty;
+        var queueText = queuedItem is null
+            ? string.Empty
+            : $"NEXT: {_ui.GetItemDisplayName(queuedItem, 32).ToUpperInvariant()}";
+        _cancelHint.text = string.IsNullOrEmpty(queueText)
+            ? cancelText
+            : string.IsNullOrEmpty(cancelText) ? queueText : $"{queueText}\n{cancelText}";
+        _cancelHint.gameObject.SetActive(!string.IsNullOrEmpty(_cancelHint.text));
     }
 
     internal void Update()
@@ -152,33 +195,12 @@ internal sealed class ItemUseDelayTimerView
         _cancelHint = document.Require<TMP_Text>("TimerRoot/CancelHint");
     }
 
-    private void SetCancelHint()
-    {
-        var shortcut = Configuration.ClearItemAccessDelay.Value;
-        var hasShortcut = shortcut.MainKey != KeyCode.None;
-        _cancelHint!.text = hasShortcut
-            ? $"PRESS {shortcut.ToString().ToUpperInvariant()} TO CANCEL"
-            : string.Empty;
-        _cancelHint.gameObject.SetActive(hasShortcut);
-    }
-
     private void PlayResultSound(bool completed)
     {
         _ui?.PlaySound(
             Configuration.TimerSounds.Value,
             completed ? EFT.UI.EUISoundType.ButtonBottomBarClick : EFT.UI.EUISoundType.MenuEscape,
             "Item-use delay timer");
-    }
-
-    private static string GetDelayDetail(Configuration.ItemAccessDelayInfo delayInfo)
-    {
-        if (delayInfo.NestingDelay <= 0f)
-        {
-            return $"BASE ACCESS DELAY  {delayInfo.BaseDelay:0.0}s";
-        }
-
-        var layerLabel = delayInfo.NestingDepth == 1 ? "LAYER" : "LAYERS";
-        return $"BASE {delayInfo.BaseDelay:0.0}s  +  {delayInfo.NestingDelay:0.0}s NESTED  •  {delayInfo.NestingDepth} {layerLabel}";
     }
 
 }

@@ -35,6 +35,11 @@ internal sealed class QuickUseWheelView
     private TMP_Text? _cancelHint;
     private TMP_Text? _pageHint;
     private TMP_Text? _controls;
+    private RectTransform? _detailsPanel;
+    private RectTransform? _detailsShadow;
+    private TMP_Text? _detailsName;
+    private TMP_Text? _detailsBody;
+    private TMP_Text? _detailsAction;
     private int _presentedSelectedIndex = int.MinValue;
 
     internal bool IsAvailable => _document?.IsAvailable == true;
@@ -79,6 +84,8 @@ internal sealed class QuickUseWheelView
 
         if (pageItemCount == 0)
         {
+            _detailsPanel!.gameObject.SetActive(false);
+            _detailsShadow!.gameObject.SetActive(false);
             _selectedName!.text = state.EmptyTitle;
             _cancelHint!.text = state.EmptyHint;
             _centerBorder!.color = new Color(0.34f, 0.36f, 0.36f, 0.96f);
@@ -91,7 +98,6 @@ internal sealed class QuickUseWheelView
         var slice = QuickUseWheelGeometry.GetSliceDegrees(pageItemCount);
         var visibleSegmentDegrees = QuickUseWheelGeometry.GetVisibleSegmentDegrees(pageItemCount);
         var showRingNames = pageItemCount < 12;
-        var showStateDetails = pageItemCount <= 8;
         var showSourceDetails = pageItemCount <= 7;
         var labelWidth = pageItemCount == 1
             ? 132f
@@ -120,7 +126,7 @@ internal sealed class QuickUseWheelView
             view.State.rectTransform.sizeDelta = new Vector2(labelWidth, 18f);
             view.State.rectTransform.anchoredPosition = new Vector2(0f, -35f * verticalDirection);
             view.Source.rectTransform.sizeDelta = new Vector2(labelWidth, 16f);
-            view.Source.rectTransform.anchoredPosition = new Vector2(0f, -52f * verticalDirection);
+            view.Source.rectTransform.anchoredPosition = new Vector2(0f, -35f * verticalDirection);
             view.Icon.sprite = wheelItem.Icon?.Sprite;
             // Unity's implicit bool conversion avoids its more expensive null comparison.
             view.Icon.enabled = view.Icon.sprite;
@@ -133,7 +139,7 @@ internal sealed class QuickUseWheelView
             view.State.color = wheelItem.IsQueued
                 ? QueuedNameColor
                 : new Color(0.72f, 0.74f, 0.72f, 1f);
-            view.State.gameObject.SetActive(showStateDetails && wheelItem.ShowState && !string.IsNullOrEmpty(wheelItem.State));
+            view.State.gameObject.SetActive(false);
             view.Source.text = wheelItem.SourceName;
             view.Source.color = wheelItem.IsQueued
                 ? new Color(0.54f, 0.49f, 0.34f, 1f)
@@ -143,6 +149,8 @@ internal sealed class QuickUseWheelView
         }
 
         _cancelHint!.text = "CENTER TO CANCEL";
+        _detailsPanel!.gameObject.SetActive(false);
+        _detailsShadow!.gameObject.SetActive(false);
         UpdateModeStatus(page, pageCount, state.Status);
         _controls!.text = state.Controls;
         _presentedSelectedIndex = int.MinValue;
@@ -154,7 +162,8 @@ internal sealed class QuickUseWheelView
         int pageItemCount,
         int selectedIndex,
         QuickUseWheelEntry? selectedItem,
-        string selectionHint)
+        string selectionHint,
+        string selectionDetail)
     {
         if (_document?.IsAvailable != true)
         {
@@ -196,8 +205,16 @@ internal sealed class QuickUseWheelView
         }
 
         _presentedSelectedIndex = selectedIndex;
-        _selectedName!.text = selectedItem?.FullName ?? "CANCEL";
-        _cancelHint!.text = selectionHint;
+        _selectedName!.text = selectedItem?.DisplayName ?? "CANCEL";
+        _cancelHint!.text = selectedItem.HasValue ? "CENTER TO CANCEL" : selectionHint;
+        _detailsPanel!.gameObject.SetActive(selectedItem.HasValue);
+        _detailsShadow!.gameObject.SetActive(selectedItem.HasValue);
+        if (selectedItem.HasValue)
+        {
+            _detailsName!.text = selectedItem.Value.FullName;
+            _detailsBody!.text = selectionDetail;
+            _detailsAction!.text = selectionHint;
+        }
         _centerBorder!.color = selectedItem is { IsQueued: true }
             ? QueuedSegmentColor
             : selectedItem is { IsUsable: false }
@@ -226,6 +243,11 @@ internal sealed class QuickUseWheelView
         _centerHeader = document.Require<TMP_Text>("WheelRoot/Center/CenterHeader/CenterHeaderText");
         _selectedName = document.Require<TMP_Text>("WheelRoot/Center/SelectedName");
         _cancelHint = document.Require<TMP_Text>("WheelRoot/Center/CancelHint");
+        _detailsShadow = document.Require<RectTransform>("DetailsShadow");
+        _detailsPanel = document.Require<RectTransform>("DetailsPanel");
+        _detailsName = document.Require<TMP_Text>("DetailsPanel/Name");
+        _detailsBody = document.Require<TMP_Text>("DetailsPanel/Body");
+        _detailsAction = document.Require<TMP_Text>("DetailsPanel/Action");
         _pageHint = document.Require<TMP_Text>("PageHint");
         _pageHint.rectTransform.sizeDelta = new Vector2(760f, 30f);
         _controls = document.Require<TMP_Text>("Controls");

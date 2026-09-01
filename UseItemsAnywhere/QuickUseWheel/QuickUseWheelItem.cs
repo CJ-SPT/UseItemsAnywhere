@@ -11,8 +11,10 @@ internal readonly struct QuickUseWheelItem(
     string displayName,
     string fullName,
     string state,
+    Configuration.ItemAccessDelayInfo? delayInfo,
     bool isUsable,
     bool isQueued,
+    bool isNextQueued,
     bool isFavorite,
     EquipmentSlot sourceSlot,
     string sourceName,
@@ -25,8 +27,10 @@ internal readonly struct QuickUseWheelItem(
     internal string DisplayName { get; } = displayName;
     internal string FullName { get; } = fullName;
     internal string State { get; } = state;
+    internal Configuration.ItemAccessDelayInfo? DelayInfo { get; } = delayInfo;
     internal bool IsUsable { get; } = isUsable;
     internal bool IsQueued { get; } = isQueued;
+    internal bool IsNextQueued { get; } = isNextQueued;
     internal bool IsFavorite { get; } = isFavorite;
     internal EquipmentSlot SourceSlot { get; } = sourceSlot;
     internal ItemIcon? Icon { get; } = icon;
@@ -39,8 +43,10 @@ internal readonly struct QuickUseWheelItem(
         DisplayName,
         FullName,
         State,
+        DelayInfo,
         IsUsable,
         IsQueued,
+        IsNextQueued,
         value,
         SourceSlot,
         SourceName,
