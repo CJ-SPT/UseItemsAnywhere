@@ -48,6 +48,8 @@ public static class Configuration
     
     public static ConfigEntry<bool> EnableQuickUseWheel = null!;
     public static ConfigEntry<KeyboardShortcut> QuickUseWheelKey = null!;
+    public static ConfigEntry<bool> EnableWeaponDeviceWheel = null!;
+    public static ConfigEntry<KeyboardShortcut> WeaponDeviceWheelKey = null!;
     public static ConfigEntry<bool> QuickUseTapLastItem = null!;
     public static ConfigEntry<float> QuickUseWheelHoldDuration = null!;
     public static ConfigEntry<bool> QuickUseWheelSounds = null!;
@@ -117,6 +119,24 @@ public static class Configuration
             new KeyboardShortcut(KeyCode.H),
             new ConfigDescription(
                 "Key tapped to reuse the last wheel item or held to open and select from the quick-use item wheel.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(EnableWeaponDeviceWheel = configFile.Bind(
+            QuickUseWheel,
+            "Enable Weapon Device Wheel",
+            true,
+            new ConfigDescription(
+                "Configures whether or not the firearm-control wheel for fire modes and tactical devices is enabled.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(WeaponDeviceWheelKey = configFile.Bind(
+            QuickUseWheel,
+            "Weapon Device Wheel Key",
+            new KeyboardShortcut(KeyCode.H, KeyCode.LeftAlt),
+            new ConfigDescription(
+                "Key held to select fire modes and control tactical devices on the firearm currently in hand.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
@@ -431,7 +451,7 @@ public static class Configuration
             "Clear Item Access Delay",
             KeyboardShortcut.Empty,
             new ConfigDescription(
-                "Key used to cancel the currently queued item use and clear its access delay.",
+                "Key used to cancel the current pending access and clear the next queued item.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
