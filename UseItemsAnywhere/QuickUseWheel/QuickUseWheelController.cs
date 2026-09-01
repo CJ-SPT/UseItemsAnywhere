@@ -547,9 +547,12 @@ internal sealed class QuickUseWheelController
             return;
         }
 
-        var succeeded = cycleMode
-            ? _deviceInventory.CycleMode(_player, selectedDevice.Value)
-            : _deviceInventory.Toggle(_player, selectedDevice.Value);
+        var fireModeAction = selectedDevice.Value.IsFireMode;
+        var succeeded = fireModeAction
+            ? !cycleMode && _deviceInventory.SelectFireMode(_player, selectedDevice.Value)
+            : cycleMode
+                ? _deviceInventory.CycleMode(_player, selectedDevice.Value)
+                : _deviceInventory.Toggle(_player, selectedDevice.Value);
         if (!succeeded)
         {
             PlaySound(EUISoundType.MenuEscape);
@@ -558,11 +561,11 @@ internal sealed class QuickUseWheelController
             return;
         }
 
-        if (!cycleMode)
+        if (!fireModeAction && !cycleMode)
         {
             _player.PlayTacticalSound();
         }
-        PlaySound(cycleMode ? EUISoundType.MenuDropdownSelect : EUISoundType.ButtonClick);
+        PlaySound(fireModeAction || cycleMode ? EUISoundType.MenuDropdownSelect : EUISoundType.ButtonClick);
         PopulateEntries();
         _page = Mathf.Clamp(_page, 0, PageCount - 1);
         RefreshWheel();
@@ -615,11 +618,11 @@ internal sealed class QuickUseWheelController
         if (_mode == WheelMode.WeaponDevices)
         {
             return new QuickUseWheelViewState(
-                "WEAPON DEVICES",
-                "NO DEVICES\nAVAILABLE",
-                "EQUIP A WEAPON WITH TACTICAL DEVICES",
-                "LMB TOGGLE   •   MMB MODE   •   RELEASE / ESC / RMB CLOSE",
-                "CHANGES APPLY IMMEDIATELY");
+                "FIREARM CONTROLS",
+                "NO CONTROLS\nAVAILABLE",
+                "EQUIP A FIREARM WITH SELECTABLE CONTROLS",
+                "LMB SELECT / TOGGLE   •   MMB DEVICE MODE   •   RELEASE / ESC / RMB CLOSE",
+                "FIRE MODE AND DEVICES APPLY IMMEDIATELY");
         }
 
         var pendingMode = Configuration.PendingItemUseBehavior.Value switch
@@ -676,6 +679,8 @@ internal sealed class QuickUseWheelController
             }
             return GetSelectedDevice() switch
             {
+                { IsFireMode: true, IsSelectedFireMode: true } => "CURRENT FIRE MODE",
+                { IsFireMode: true } => "LMB: SELECT FIRE MODE",
                 { IsAggregate: true, CanCycleMode: true } => "LMB TOGGLE ALL\nMMB NEXT MODES",
                 { IsAggregate: true } => "LMB: TOGGLE ALL",
                 { CanCycleMode: true } => "LMB TOGGLE\nMMB NEXT MODE",

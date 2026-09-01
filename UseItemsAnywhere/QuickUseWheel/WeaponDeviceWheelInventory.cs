@@ -32,6 +32,7 @@ internal sealed class WeaponDeviceWheelInventory
         }
 
         _ui.SetItemCachePlayer(player);
+        AddFireModeItems(_controller.Item);
         foreach (var light in _controller.GetAllLightMods())
         {
             if (light?.Item != null)
@@ -59,6 +60,11 @@ internal sealed class WeaponDeviceWheelInventory
 
     internal bool Toggle(Player player, WeaponDeviceWheelItem item)
     {
+        if (item.IsFireMode)
+        {
+            return false;
+        }
+
         if (!TryResolveCurrentLights(player, item, out var lights) || lights.Count == 0)
         {
             return false;
@@ -82,7 +88,8 @@ internal sealed class WeaponDeviceWheelInventory
 
     internal bool CycleMode(Player player, WeaponDeviceWheelItem item)
     {
-        if (!item.CanCycleMode
+        if (item.IsFireMode
+            || !item.CanCycleMode
             || !TryResolveCurrentLights(player, item, out var lights)
             || lights.Count == 0)
         {
@@ -96,6 +103,37 @@ internal sealed class WeaponDeviceWheelInventory
         }
 
         return _controller!.SetLightsState(states, false, true);
+    }
+
+    internal bool SelectFireMode(Player player, WeaponDeviceWheelItem item)
+    {
+        if (!item.IsFireMode
+            || !item.FireMode.HasValue
+            || !IsCurrentFirearm(player)
+            || _controller is null)
+        {
+            return false;
+        }
+
+        var targetMode = item.FireMode.Value;
+        var weapon = _controller.Item;
+        if (weapon.SelectedFireMode == targetMode)
+        {
+            return true;
+        }
+        if (_controller.CurrentOperation is not Player.FirearmController.Idling)
+        {
+            return false;
+        }
+
+        foreach (var availableMode in weapon.FireMode.AvailableEFireModes)
+        {
+            if (availableMode == targetMode)
+            {
+                return _controller.ChangeFireMode(targetMode);
+            }
+        }
+        return false;
     }
 
     internal void Clear()
@@ -118,15 +156,47 @@ internal sealed class WeaponDeviceWheelInventory
 
         var firearm = _controller!.Item;
         _items.Add(new WeaponDeviceWheelItem(
+            WeaponWheelItemKind.AllDevices,
+            null,
             null,
             "ALL DEVICES",
             "All Weapon Devices",
             $"{activeCount}/{_lights.Count} ON",
             _ui.GetItemDisplayName(firearm, 22).ToUpperInvariant(),
             CanChangeState(_lights),
-            true,
+            false,
             _lights.Exists(static light => light._template.ModesCount > 1),
             _ui.GetItemIcon(firearm)));
+    }
+
+    private void AddFireModeItems(Weapon firearm)
+    {
+        var availableModes = firearm.FireMode.AvailableEFireModes;
+        if (availableModes.Length <= 1)
+        {
+            return;
+        }
+
+        var selectedMode = firearm.SelectedFireMode;
+        var canChangeMode = _controller!.CurrentOperation is Player.FirearmController.Idling;
+        var icon = _ui.GetItemIcon(firearm);
+        foreach (var fireMode in availableModes)
+        {
+            var name = GetFireModeName(fireMode);
+            var isSelected = fireMode == selectedMode;
+            _items.Add(new WeaponDeviceWheelItem(
+                WeaponWheelItemKind.FireMode,
+                null,
+                fireMode,
+                name,
+                $"{name} Fire Mode",
+                isSelected ? "CURRENT" : "SELECT",
+                string.Empty,
+                isSelected || canChangeMode,
+                isSelected,
+                false,
+                icon));
+        }
     }
 
     private void AddDeviceItem(LightComponent light)
@@ -137,7 +207,9 @@ internal sealed class WeaponDeviceWheelInventory
             : string.Empty;
         var item = light.Item;
         _items.Add(new WeaponDeviceWheelItem(
+            WeaponWheelItemKind.Device,
             light,
+            null,
             _ui.GetItemDisplayName(item, 18),
             _ui.GetItemName(item),
             $"{(light.IsActive ? "ON" : "OFF")}{mode}",
@@ -146,6 +218,20 @@ internal sealed class WeaponDeviceWheelInventory
             false,
             modeCount > 1,
             _ui.GetItemIcon(item)));
+    }
+
+    private static string GetFireModeName(Weapon.EFireMode fireMode)
+    {
+        return fireMode switch
+        {
+            Weapon.EFireMode.fullauto => "FULL AUTO",
+            Weapon.EFireMode.single => "SINGLE SHOT",
+            Weapon.EFireMode.doublet => "DOUBLE TAP",
+            Weapon.EFireMode.burst => "BURST",
+            Weapon.EFireMode.doubleaction => "DOUBLE ACTION",
+            Weapon.EFireMode.semiauto => "SEMI AUTO",
+            _ => fireMode.ToString().ToUpperInvariant(),
+        };
     }
 
     private bool CanChangeState(IReadOnlyList<LightComponent> lights)

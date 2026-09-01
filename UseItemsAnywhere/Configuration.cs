@@ -127,7 +127,7 @@ public static class Configuration
             "Enable Weapon Device Wheel",
             true,
             new ConfigDescription(
-                "Configures whether or not the weapon-device wheel is enabled.",
+                "Configures whether or not the firearm-control wheel for fire modes and tactical devices is enabled.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
@@ -136,7 +136,7 @@ public static class Configuration
             "Weapon Device Wheel Key",
             new KeyboardShortcut(KeyCode.H, KeyCode.LeftAlt),
             new ConfigDescription(
-                "Key held to open and control tactical devices mounted on the weapon currently in hand.",
+                "Key held to select fire modes and control tactical devices on the firearm currently in hand.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 
