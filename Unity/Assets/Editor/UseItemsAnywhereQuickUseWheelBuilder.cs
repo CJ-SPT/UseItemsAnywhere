@@ -212,20 +212,20 @@ internal static class UseItemsAnywhereQuickUseWheelBuilder
         Stretch(favoriteLabel.rectTransform);
         favoriteBadge.gameObject.SetActive(false);
         var itemName = CreateText("Name", itemTemplate, 15f, FontStyles.Bold, new Color(0.82f, 0.83f, 0.8f, 1f));
-        itemName.rectTransform.sizeDelta = new Vector2(132f, 28f);
-        itemName.rectTransform.anchoredPosition = new Vector2(0f, -15f);
+        itemName.rectTransform.sizeDelta = new Vector2(132f, 24f);
+        itemName.rectTransform.anchoredPosition = new Vector2(0f, -14f);
         itemName.enableAutoSizing = true;
         itemName.fontSizeMin = 11f;
         itemName.fontSizeMax = 15f;
         var state = CreateText("State", itemTemplate, 11f, FontStyles.Bold, new Color(0.72f, 0.74f, 0.72f, 1f));
-        state.rectTransform.sizeDelta = new Vector2(132f, 20f);
-        state.rectTransform.anchoredPosition = new Vector2(0f, -38f);
+        state.rectTransform.sizeDelta = new Vector2(132f, 18f);
+        state.rectTransform.anchoredPosition = new Vector2(0f, -35f);
         state.enableAutoSizing = true;
         state.fontSizeMin = 9f;
         state.fontSizeMax = 11f;
         var source = CreateText("Source", itemTemplate, 10f, FontStyles.Normal, new Color(0.45f, 0.47f, 0.46f, 1f));
-        source.rectTransform.sizeDelta = new Vector2(132f, 18f);
-        source.rectTransform.anchoredPosition = new Vector2(0f, -57f);
+        source.rectTransform.sizeDelta = new Vector2(132f, 16f);
+        source.rectTransform.anchoredPosition = new Vector2(0f, -52f);
         itemTemplate.gameObject.SetActive(false);
 
         var centerShadow = CreateImage("CenterShadow", wheelRoot, circle, new Color(0f, 0f, 0f, 0.78f));

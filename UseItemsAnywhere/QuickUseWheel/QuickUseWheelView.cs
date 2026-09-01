@@ -9,6 +9,8 @@ namespace UseItemsAnywhere.QuickUseWheel;
 internal sealed class QuickUseWheelView
 {
     private const string PrefabPath = "assets/mods/useitemsanywhere.assets/ui/quickusewheel.prefab";
+    private const float IconRadius = 222f;
+    private const float LabelWidthRadius = 188f;
 
     private static readonly Color NormalSegmentColor = new(0.045f, 0.048f, 0.048f, 0.86f);
     private static readonly Color SelectedSegmentColor = new(0.22f, 0.25f, 0.26f, 0.96f);
@@ -88,10 +90,12 @@ internal sealed class QuickUseWheelView
 
         var slice = QuickUseWheelGeometry.GetSliceDegrees(pageItemCount);
         var visibleSegmentDegrees = QuickUseWheelGeometry.GetVisibleSegmentDegrees(pageItemCount);
-        const float labelRadius = 188f;
+        var showRingNames = pageItemCount < 12;
+        var showStateDetails = pageItemCount <= 8;
+        var showSourceDetails = pageItemCount <= 7;
         var labelWidth = pageItemCount == 1
             ? 132f
-            : Mathf.Clamp(2f * labelRadius * Mathf.Sin(visibleSegmentDegrees * Mathf.Deg2Rad * 0.5f) * 0.76f, 66f, 132f);
+            : Mathf.Clamp(2f * LabelWidthRadius * Mathf.Sin(visibleSegmentDegrees * Mathf.Deg2Rad * 0.5f) * 0.76f, 66f, 132f);
 
         for (var index = 0; index < pageItemCount; index++)
         {
@@ -101,13 +105,22 @@ internal sealed class QuickUseWheelView
             view.Segment.Configure(index * slice, visibleSegmentDegrees);
 
             var angle = index * slice * Mathf.Deg2Rad;
+            var radialDirection = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle));
+            var textBelowIcon = radialDirection.y > 0.001f
+                || Mathf.Abs(radialDirection.y) <= 0.001f && radialDirection.x >= 0f;
+            var verticalDirection = textBelowIcon ? 1f : -1f;
+            var iconOffset = new Vector2(0f, 31f * verticalDirection);
             view.ItemRoot.gameObject.SetActive(true);
             view.ItemRoot.localScale = Vector3.one;
-            view.ItemRoot.anchoredPosition = new Vector2(Mathf.Sin(angle), Mathf.Cos(angle)) * labelRadius;
+            view.ItemRoot.anchoredPosition = radialDirection * IconRadius - iconOffset;
             view.ItemRoot.sizeDelta = new Vector2(labelWidth, 140f);
-            view.Name.rectTransform.sizeDelta = new Vector2(labelWidth, 28f);
-            view.State.rectTransform.sizeDelta = new Vector2(labelWidth, 20f);
-            view.Source.rectTransform.sizeDelta = new Vector2(labelWidth, 22f);
+            view.IconFrame.rectTransform.anchoredPosition = iconOffset;
+            view.Name.rectTransform.sizeDelta = new Vector2(labelWidth, 24f);
+            view.Name.rectTransform.anchoredPosition = new Vector2(0f, -14f * verticalDirection);
+            view.State.rectTransform.sizeDelta = new Vector2(labelWidth, 18f);
+            view.State.rectTransform.anchoredPosition = new Vector2(0f, -35f * verticalDirection);
+            view.Source.rectTransform.sizeDelta = new Vector2(labelWidth, 16f);
+            view.Source.rectTransform.anchoredPosition = new Vector2(0f, -52f * verticalDirection);
             view.Icon.sprite = wheelItem.Icon?.Sprite;
             // Unity's implicit bool conversion avoids its more expensive null comparison.
             view.Icon.enabled = view.Icon.sprite;
@@ -115,16 +128,17 @@ internal sealed class QuickUseWheelView
                 ? QueuedNameColor
                 : wheelItem.IsUsable ? Color.white : UnavailableNameColor;
             view.Name.text = wheelItem.DisplayName;
+            view.Name.gameObject.SetActive(showRingNames);
             view.State.text = wheelItem.State;
             view.State.color = wheelItem.IsQueued
                 ? QueuedNameColor
                 : new Color(0.72f, 0.74f, 0.72f, 1f);
-            view.State.gameObject.SetActive(wheelItem.ShowState && !string.IsNullOrEmpty(wheelItem.State));
+            view.State.gameObject.SetActive(showStateDetails && wheelItem.ShowState && !string.IsNullOrEmpty(wheelItem.State));
             view.Source.text = wheelItem.SourceName;
             view.Source.color = wheelItem.IsQueued
                 ? new Color(0.54f, 0.49f, 0.34f, 1f)
                 : new Color(0.45f, 0.47f, 0.46f, 1f);
-            view.Source.gameObject.SetActive(wheelItem.ShowSource);
+            view.Source.gameObject.SetActive(showSourceDetails && wheelItem.ShowSource);
             view.FavoriteBadge.gameObject.SetActive(wheelItem.IsFavorite);
         }
 
