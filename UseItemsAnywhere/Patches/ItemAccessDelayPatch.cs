@@ -1,8 +1,10 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using Comfort.Common;
 using EFT;
+using EFT.Ballistics;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
@@ -17,6 +19,8 @@ namespace UseItemsAnywhere.Patches;
 /// </summary>
 internal sealed class ItemAccessDelayPatch : ModulePatch
 {
+    private const float MovementInputThresholdSqr = 0.0001f;
+
     private static readonly Dictionary<Player, PendingAccess> PendingPlayers = [];
     private static readonly Dictionary<Player, WaitingAccess> WaitingForCurrentUse = [];
     private static readonly HashSet<Player> BypassPlayers = [];
@@ -324,9 +328,26 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         PendingAccess pendingAccess)
     {
         ItemUseDelayPresentation? presentation = null;
+        BackpackAccessAnimation? backpackAnimation = null;
+        var healthController = player.HealthController;
+        Action<EBodyPart, float, DamageInfo>? damageHandler = null;
         var completed = false;
         try
         {
+            if (healthController != null)
+            {
+                damageHandler = (_, damage, _) =>
+                {
+                    if (Configuration.CancelAccessOnDamage.Value && damage > 0f)
+                    {
+                        CancelPendingAccess(player, pendingAccess);
+                    }
+                };
+                healthController.ApplyDamageEvent += damageHandler;
+            }
+
+            backpackAnimation = BackpackAccessAnimation.Begin(player, delayInfo);
+
             if (Configuration.ShowTimerPanel.Value)
             {
                 presentation = Plugin.DelayTimer?.Begin(
@@ -339,6 +360,12 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             var delayEndTime = Time.time + delayInfo.TotalDelay;
             while (Time.time < delayEndTime && !pendingAccess.IsCancelled)
             {
+                if (ShouldCancelForMovement(player))
+                {
+                    CancelPendingAccess(player, pendingAccess);
+                    break;
+                }
+
                 presentation?.SetRemaining(delayEndTime - Time.time);
                 yield return null;
             }
@@ -413,6 +440,12 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         }
         finally
         {
+            if (damageHandler != null && healthController != null)
+            {
+                healthController.ApplyDamageEvent -= damageHandler;
+            }
+
+            backpackAnimation?.Finish();
             presentation?.Finish(completed);
             BypassPlayers.Remove(player);
             if (!completed)
@@ -435,6 +468,21 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                 StartFollowUp(player, followUp.Value);
             }
         }
+    }
+
+    private static void CancelPendingAccess(Player player, PendingAccess pendingAccess)
+    {
+        pendingAccess.FollowUp = null;
+        pendingAccess.IsCancelled = true;
+        Plugin.DelayTimer?.SetQueuedItem(player, null);
+    }
+
+    private static bool ShouldCancelForMovement(Player player)
+    {
+        return Configuration.CancelAccessOnMovement.Value
+            && player
+            && player.MovementContext is { } movementContext
+            && movementContext.MovementDirection.sqrMagnitude > MovementInputThresholdSqr;
     }
 
     private static void StartFollowUp(Player player, PendingRequest request)

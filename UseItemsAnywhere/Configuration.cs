@@ -41,6 +41,9 @@ public static class Configuration
     
     public static ConfigEntry<bool> EnableSlotDelays = null!; 
     public static ConfigEntry<bool> ShowTimerPanel = null!; 
+    public static ConfigEntry<bool> AnimateBackpackAccess = null!;
+    public static ConfigEntry<bool> CancelAccessOnMovement = null!;
+    public static ConfigEntry<bool> CancelAccessOnDamage = null!;
     public static ConfigEntry<bool> TimerSounds = null!;
     public static ConfigEntry<PendingUseMode> PendingItemUseBehavior = null!;
     public static ConfigEntry<KeyboardShortcut> ClearItemAccessDelay = null!;
@@ -404,6 +407,33 @@ public static class Configuration
             true,
             new ConfigDescription(
                 "Configures whether or not to show the themed item-use delay timer.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(AnimateBackpackAccess = configFile.Bind(
+            SlotAccessDelays,
+            "Animate Backpack Access",
+            true,
+            new ConfigDescription(
+                "Makes the player crouch and play Tarkov's inventory-rummaging animation while waiting to use an item from the backpack.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(CancelAccessOnMovement = configFile.Bind(
+            SlotAccessDelays,
+            "Moving Cancels Access",
+            true,
+            new ConfigDescription(
+                "Cancels the current delayed item-access attempt, including its queued follow-up, when the player starts moving.",
+                null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(CancelAccessOnDamage = configFile.Bind(
+            SlotAccessDelays,
+            "Damage Cancels Access",
+            true,
+            new ConfigDescription(
+                "Cancels the current delayed item-access attempt, including its queued follow-up, when the player takes damage.",
                 null,
                 new VersionChecker.ConfigurationManagerAttributes())));
 

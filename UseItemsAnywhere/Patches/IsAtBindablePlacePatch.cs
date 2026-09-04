@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System;
 using System.Reflection;
 using EFT;
 using EFT.InventoryLogic;
@@ -67,6 +68,34 @@ public class IsAtBindablePlace : ModulePatch
                 
                 __result = __instance.Inventory.SlotsContainItem(Configuration.AllOtherItems.Value, item);
                 return;
+        }
+    }
+
+    [PatchFinalizer]
+    private static Exception? Finalizer(
+        Exception? __exception,
+        InventoryController __instance,
+        ref bool __result,
+        Item item)
+    {
+        if (__exception is not NullReferenceException
+            || __exception.StackTrace?.Contains(
+                "PackNStrap.Helpers.Common.IsItemInReachableLocation") != true)
+        {
+            return __exception;
+        }
+
+        // Pack 'n Strap uses the same unsafe top-level item enumeration in its
+        // bindability patch. A consumed item reaches this path while Tarkov is
+        // unbinding and removing it, after the item-use animation has completed.
+        try
+        {
+            Postfix(__instance, ref __result, item);
+            return null;
+        }
+        catch
+        {
+            return __exception;
         }
     }
 
