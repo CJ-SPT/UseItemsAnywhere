@@ -1,0 +1,10 @@
+ManifestFileVersion: 0
+CRC: 3750621593
+AssetBundleManifest:
+  AssetBundleInfos:
+    Info_0:
+      Name: quickusewheel
+      Dependencies: {}
+    Info_1:
+      Name: itemusedelaytimer
+      Dependencies: {}

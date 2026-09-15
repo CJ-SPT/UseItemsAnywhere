@@ -30,6 +30,9 @@ internal sealed class QuickUseWheelController
     private readonly QuickUseWheelInventory _inventory = new();
     private readonly WeaponDeviceWheelInventory _deviceInventory = new();
     private readonly List<QuickUseWheelEntry> _entries = [];
+    private readonly QuickUseCategorySlots<QuickUseWheelItem> _categorySlots = new();
+    private bool _hasCategoryPage;
+    private bool _categorySelectionChangedThisUpdate;
     private readonly QuickUseWheelView _view = new();
     private RuntimeUiService _ui = null!;
     private ManualLogSource? _logger;
@@ -63,7 +66,7 @@ internal sealed class QuickUseWheelController
 
     private static int ItemsPerPage => Configuration.QuickUseItemsPerPage.Value;
 
-    private int PageCount => Mathf.Max(1, Mathf.CeilToInt((float)_entries.Count / ItemsPerPage));
+    private int PageCount => QuickUseWheelPages.Count(_entries.Count, ItemsPerPage, _hasCategoryPage);
 
     internal static void RequestPendingOpen(Player player)
     {
@@ -84,6 +87,10 @@ internal sealed class QuickUseWheelController
 
     internal void Update()
     {
+        _categorySelectionChangedThisUpdate = false;
+        var hasPlayer = TryGetLocalPlayer(out var contextPlayer, out _);
+        _categorySlots.SetContext(Singleton<IBotGame>.Instance,
+            hasPlayer && contextPlayer.HealthController?.IsAlive == true ? contextPlayer : null);
         var itemWheelEnabled = Configuration.EnableQuickUseWheel.Value;
         var deviceWheelEnabled = Configuration.EnableWeaponDeviceWheel.Value;
         if (_isOpen
@@ -185,6 +192,7 @@ internal sealed class QuickUseWheelController
     internal void OnDestroy()
     {
         Close(false);
+        _categorySlots.SetContext(null, null);
         _view.Destroy();
         _inventory.Clear();
         _deviceInventory.Clear();
@@ -224,7 +232,14 @@ internal sealed class QuickUseWheelController
             return;
         }
 
+        var beforeRefresh = GetSelectedEntry();
         RefreshWheelItems();
+        if (!_isOpen) return;
+        var afterRefresh = GetSelectedEntry();
+        // A refill in the same frame as release/click must not confirm an unseen item.
+        _categorySelectionChangedThisUpdate = beforeRefresh is { Category: not QuickUseCategory.Unassigned }
+            && (!ReferenceEquals(beforeRefresh.Value.Item?.Item, afterRefresh?.Item?.Item)
+                || beforeRefresh.Value.Category != afterRefresh?.Category);
         UpdateSelection();
 
         if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
@@ -403,6 +418,12 @@ internal sealed class QuickUseWheelController
     private bool PopulateEntries()
     {
         _entries.Clear();
+        var hadCategoryPage = _hasCategoryPage;
+        _hasCategoryPage = _mode == WheelMode.Items && Configuration.HasQuickUseCategorySlots;
+        if (_isOpen && hadCategoryPage != _hasCategoryPage)
+        {
+            _page = _hasCategoryPage ? _page + 1 : Math.Max(0, _page - 1);
+        }
         if (_player is null || !_player)
         {
             return false;
@@ -414,19 +435,29 @@ internal sealed class QuickUseWheelController
             {
                 return false;
             }
+            _categorySlots.SetContext(Singleton<IBotGame>.Instance, _player);
+            for (var slot = 0; slot < QuickUseWheelPages.CategorySlotCount; slot++)
+            {
+                var category = Configuration.QuickUseCategoryPositions[slot].Value;
+                var candidate = _categorySlots.Resolve(slot, category, _inventory.CategoryCandidates);
+                if (!_hasCategoryPage) continue;
+                if (candidate.HasValue)
+                {
+                    AddItemEntry(candidate.Value.Value, category);
+                }
+                else
+                {
+                    var blank = category == QuickUseCategory.Unassigned;
+                    _entries.Add(new QuickUseWheelEntry(
+                        blank ? string.Empty : category.DisplayName(),
+                        blank ? string.Empty : category.DisplayName(),
+                        blank ? string.Empty : "No available item", string.Empty,
+                        false, false, false, !blank, false, null, category: category, isBlank: blank));
+                }
+            }
             foreach (var item in _inventory.Items)
             {
-                _entries.Add(new QuickUseWheelEntry(
-                    item.DisplayName,
-                    item.FullName,
-                    item.State,
-                    item.SourceName,
-                    item.IsUsable,
-                    item.IsQueued,
-                    item.IsFavorite,
-                    item.IsQueued || item.IsGrouped || item.DelayInfo.HasValue || Configuration.QuickUseShowItemState.Value,
-                    Configuration.QuickUseShowSourceSlot.Value,
-                    item.Icon));
+                AddItemEntry(item);
             }
             return true;
         }
@@ -449,6 +480,15 @@ internal sealed class QuickUseWheelController
         return true;
     }
 
+    private void AddItemEntry(QuickUseWheelItem item, QuickUseCategory category = QuickUseCategory.Unassigned)
+    {
+        _entries.Add(new QuickUseWheelEntry(
+            category == QuickUseCategory.Unassigned ? item.DisplayName : category.DisplayName(),
+            item.FullName, item.State, item.SourceName, item.IsUsable, item.IsQueued, item.IsFavorite,
+            item.IsQueued || item.IsGrouped || item.DelayInfo.HasValue || Configuration.QuickUseShowItemState.Value,
+            Configuration.QuickUseShowSourceSlot.Value, item.Icon, item, category));
+    }
+
     private void Close(bool useSelection)
     {
         if (!_isOpen)
@@ -459,11 +499,15 @@ internal sealed class QuickUseWheelController
         }
 
         var player = _player;
+        var selectedCategory = GetSelectedEntry()?.Category ?? QuickUseCategory.Unassigned;
+        if (_categorySelectionChangedThisUpdate) useSelection = false;
         var selectedWheelItem = _mode == WheelMode.Items && useSelection ? GetSelectedItem() : null;
         var selectedItem = player is not null
             && player
             && selectedWheelItem.HasValue
-                ? QuickUseWheelInventory.ResolveItemForUse(player, selectedWheelItem.Value)
+                ? selectedCategory != QuickUseCategory.Unassigned
+                    ? _inventory.RevalidateCategoryItem(player, selectedWheelItem.Value.Item, selectedCategory)
+                    : QuickUseWheelInventory.ResolveItemForUse(player, selectedWheelItem.Value)
                 : null;
         var pendingItem = player is not null
             && player
@@ -627,6 +671,7 @@ internal sealed class QuickUseWheelController
 
     private void RefreshWheel()
     {
+        _page = Mathf.Clamp(_page, 0, PageCount - 1);
         UpdatePageRange();
         UpdateSelectedIndex();
         _view.Refresh(
@@ -683,7 +728,7 @@ internal sealed class QuickUseWheelController
             status = $"CURRENT: {currentName}   •   NEXT: {nextName}";
         }
         return new QuickUseWheelViewState(
-            "QUICK USE",
+            _hasCategoryPage && _page == 0 ? "CATEGORY SLOTS" : "QUICK USE",
             "NO ITEMS\nAVAILABLE",
             "CHECK YOUR LOADOUT",
             controls,
@@ -712,6 +757,10 @@ internal sealed class QuickUseWheelController
 
         var selectedItem = GetSelectedItem();
         var details = new List<string>();
+        if (selectedEntry.Value.Category != QuickUseCategory.Unassigned)
+        {
+            details.Add($"CATEGORY  {selectedEntry.Value.Category.DisplayName()}");
+        }
         if (!string.IsNullOrEmpty(selectedEntry.Value.State))
         {
             details.Add($"STATUS  {selectedEntry.Value.State}");
@@ -876,25 +925,20 @@ internal sealed class QuickUseWheelController
         }
         var slice = QuickUseWheelGeometry.GetSliceDegrees(_pageItemCount);
         var candidateIndex = Mathf.FloorToInt((degrees + slice * 0.5f) / slice) % _pageItemCount;
-        _selectedIndex = candidateIndex;
+        _selectedIndex = GetPageEntry(candidateIndex).IsBlank ? -1 : candidateIndex;
     }
 
     private QuickUseWheelEntry? GetSelectedEntry()
     {
         return _selectedIndex >= 0 && _selectedIndex < _pageItemCount
+            && _pageStartIndex + _selectedIndex < _entries.Count
             ? GetPageEntry(_selectedIndex)
             : null;
     }
 
     private QuickUseWheelItem? GetSelectedItem()
     {
-        var itemIndex = _pageStartIndex + _selectedIndex;
-        return _mode == WheelMode.Items
-            && _selectedIndex >= 0
-            && _selectedIndex < _pageItemCount
-            && itemIndex < _inventory.Items.Count
-                ? _inventory.Items[itemIndex]
-                : null;
+        return _mode == WheelMode.Items ? GetSelectedEntry()?.Item : null;
     }
 
     private WeaponDeviceWheelItem? GetSelectedDevice()
@@ -910,8 +954,7 @@ internal sealed class QuickUseWheelController
 
     private void UpdatePageRange()
     {
-        _pageStartIndex = _page * ItemsPerPage;
-        _pageItemCount = Mathf.Min(ItemsPerPage, Mathf.Max(0, _entries.Count - _pageStartIndex));
+        (_pageStartIndex, _pageItemCount) = QuickUseWheelPages.Range(_page, _entries.Count, ItemsPerPage, _hasCategoryPage);
     }
 
     private QuickUseWheelEntry GetPageEntry(int pageIndex) => _entries[_pageStartIndex + pageIndex];

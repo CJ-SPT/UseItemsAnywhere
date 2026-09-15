@@ -12,7 +12,10 @@ internal readonly struct QuickUseWheelEntry(
     bool isFavorite,
     bool showState,
     bool showSource,
-    ItemIcon? icon)
+    ItemIcon? icon,
+    QuickUseWheelItem? item = null,
+    QuickUseCategory category = QuickUseCategory.Unassigned,
+    bool isBlank = false)
 {
     internal string DisplayName { get; } = displayName;
     internal string FullName { get; } = fullName;
@@ -24,6 +27,9 @@ internal readonly struct QuickUseWheelEntry(
     internal bool ShowState { get; } = showState;
     internal bool ShowSource { get; } = showSource;
     internal ItemIcon? Icon { get; } = icon;
+    internal QuickUseWheelItem? Item { get; } = item;
+    internal QuickUseCategory Category { get; } = category;
+    internal bool IsBlank { get; } = isBlank;
 }
 
 internal readonly struct QuickUseWheelViewState(

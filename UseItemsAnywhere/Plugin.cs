@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using BepInEx;
+using BepInEx.Logging;
 using DrakiaXYZ.VersionChecker;
 using EFT.InventoryLogic;
 using HarmonyLib;
@@ -13,7 +14,7 @@ using UseItemsAnywhere.UI;
 
 namespace UseItemsAnywhere;
 
-[BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.1.4")]
+[BepInPlugin("com.cj.useFromAnywhere", "Use Items Anywhere", "2.1.5")]
 [BepInDependency("com.SPT.custom", "4.1.0")]
 public class Plugin : BaseUnityPlugin
 {
@@ -22,6 +23,7 @@ public class Plugin : BaseUnityPlugin
     private RuntimeUiService? _runtimeUi;
 
     internal static ItemUseDelayTimerController? DelayTimer { get; private set; }
+    internal static ManualLogSource? LogSource { get; private set; }
 
     public const int TarkovVersion = 40743;
 
@@ -46,6 +48,7 @@ public class Plugin : BaseUnityPlugin
         }
 
         DontDestroyOnLoad(this);
+        LogSource = Logger;
         Configuration.Init(Config);
         var pluginDirectory = Path.GetDirectoryName(Info.Location)!;
         _runtimeUi = new RuntimeUiService(pluginDirectory, Logger, transform);

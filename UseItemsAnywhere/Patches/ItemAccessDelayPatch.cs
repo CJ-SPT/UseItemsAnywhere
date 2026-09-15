@@ -10,6 +10,7 @@ using HarmonyLib;
 using SPT.Reflection.Patching;
 using UnityEngine;
 using UseItemsAnywhere.ItemUseDelayTimer;
+using UseItemsAnywhere.BackpackAccess;
 using UseItemsAnywhere.QuickUseWheel;
 
 namespace UseItemsAnywhere.Patches;
@@ -346,7 +347,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                 healthController.ApplyDamageEvent += damageHandler;
             }
 
-            backpackAnimation = BackpackAccessAnimation.Begin(player, delayInfo);
+            backpackAnimation = BackpackAccessAnimation.Begin(player, request.Item, delayInfo);
 
             if (Configuration.ShowTimerPanel.Value)
             {
@@ -366,7 +367,9 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                     break;
                 }
 
-                presentation?.SetRemaining(delayEndTime - Time.time);
+                var remaining = delayEndTime - Time.time;
+                backpackAnimation?.Update(remaining);
+                presentation?.SetRemaining(remaining);
                 yield return null;
             }
 
@@ -427,14 +430,23 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
 
             var resultPresentation = presentation;
             var resultCallback = completeCallback;
+            var resultBackpackAnimation = backpackAnimation;
             completeCallback = result =>
             {
+                resultBackpackAnimation?.RestoreHeldItem();
                 resultPresentation?.Finish(result.Succeed);
                 resultCallback?.Invoke(result);
             };
 
+            // End the temporary looting presentation and hand contact before
+            // asking Tarkov to create the real item-use controller.
+            backpackAnimation?.Finish(handoffHeldItem: true);
+
             BypassPlayers.Add(player);
             player.TryProceed(request.Item, completeCallback, request.Scheduled);
+            // Keep the owner until TryProceed returns so a synchronous failure
+            // still restores visibility through the finally block below.
+            backpackAnimation = null;
             presentation = null;
             completed = true;
         }

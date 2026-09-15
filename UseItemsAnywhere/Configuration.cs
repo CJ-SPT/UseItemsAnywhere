@@ -6,6 +6,7 @@ using DrakiaXYZ.VersionChecker;
 using EFT;
 using EFT.InventoryLogic;
 using UnityEngine;
+using UseItemsAnywhere.QuickUseWheel;
 
 namespace UseItemsAnywhere;
 
@@ -42,6 +43,9 @@ public static class Configuration
     public static ConfigEntry<bool> EnableSlotDelays = null!; 
     public static ConfigEntry<bool> ShowTimerPanel = null!; 
     public static ConfigEntry<bool> AnimateBackpackAccess = null!;
+    public static ConfigEntry<float> BackpackHorizontalPosition = null!;
+    public static ConfigEntry<float> BackpackVerticalPosition = null!;
+    public static ConfigEntry<float> BackpackViewSize = null!;
     public static ConfigEntry<bool> CancelAccessOnMovement = null!;
     public static ConfigEntry<bool> CancelAccessOnDamage = null!;
     public static ConfigEntry<bool> TimerSounds = null!;
@@ -62,6 +66,8 @@ public static class Configuration
     public static ConfigEntry<bool> QuickUseShowSourceSlot = null!;
     public static ConfigEntry<bool> QuickUseShowItemState = null!;
     internal static ConfigEntry<string> QuickUseFavoriteTemplateIds = null!;
+    internal static readonly ConfigEntry<QuickUseCategory>[] QuickUseCategoryPositions = new ConfigEntry<QuickUseCategory>[8];
+    internal static bool HasQuickUseCategorySlots => QuickUseCategoryPositions.Any(entry => entry.Value != QuickUseCategory.Unassigned);
     public static ConfigEntry<bool> QuickUseShowPrimAndSecWeapons = null!;
     public static ConfigEntry<bool> QuickUseShowMelee = null!;
     public static ConfigEntry<bool> QuickUseShowGrenades = null!;
@@ -107,6 +113,20 @@ public static class Configuration
 
     private static void InitQuickUseWheel(ConfigFile configFile)
     {
+        string[] positions = ["Top", "Top Right", "Right", "Bottom Right", "Bottom", "Bottom Left", "Left", "Top Left"];
+        for (var index = 0; index < positions.Length; index++)
+        {
+            ConfigEntries.Add(QuickUseCategoryPositions[index] = configFile.Bind(
+                "Quick Use Wheel Category Slots",
+                positions[index],
+                QuickUseCategory.Unassigned,
+                new ConfigDescription(
+                    "Reserves this compass position on an eight-slot first page. Keeps a usable matching item, then refills from favorites and fastest access. "
+                    + "Medical treatment categories include multifunction items with enough resources. Scroll to reach all items. Set every position to Unassigned to hide this page.",
+                    null,
+                    new VersionChecker.ConfigurationManagerAttributes())));
+        }
+
         ConfigEntries.Add(EnableQuickUseWheel = configFile.Bind(
             QuickUseWheel,
             "Enable Quick Use Wheel",
@@ -415,8 +435,35 @@ public static class Configuration
             "Animate Backpack Access",
             true,
             new ConfigDescription(
-                "Makes the player crouch and play Tarkov's inventory-rummaging animation while waiting to use an item from the backpack.",
+                "Makes the player crouch, bring the equipped backpack into view, and rummage through it while waiting to use an item from the backpack.",
                 null,
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(BackpackHorizontalPosition = configFile.Bind(
+            SlotAccessDelays,
+            "Backpack Horizontal Position",
+            0.46f,
+            new ConfigDescription(
+                "Positions the animated backpack across the screen: 0 is the left edge and 1 is the right edge.",
+                new AcceptableValueRange<float>(0.2f, 0.8f),
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(BackpackVerticalPosition = configFile.Bind(
+            SlotAccessDelays,
+            "Backpack Vertical Position",
+            0.15f,
+            new ConfigDescription(
+                "Positions the animated backpack vertically: 0 is the bottom edge and 1 is the top edge.",
+                new AcceptableValueRange<float>(0.05f, 0.65f),
+                new VersionChecker.ConfigurationManagerAttributes())));
+
+        ConfigEntries.Add(BackpackViewSize = configFile.Bind(
+            SlotAccessDelays,
+            "Backpack View Size",
+            0.64f,
+            new ConfigDescription(
+                "Controls how large the animated backpack appears on screen.",
+                new AcceptableValueRange<float>(0.45f, 0.95f),
                 new VersionChecker.ConfigurationManagerAttributes())));
 
         ConfigEntries.Add(CancelAccessOnMovement = configFile.Bind(

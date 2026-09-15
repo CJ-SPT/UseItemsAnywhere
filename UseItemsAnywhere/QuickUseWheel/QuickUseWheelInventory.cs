@@ -37,14 +37,17 @@ internal sealed class QuickUseWheelInventory
     ];
 
     private readonly List<QuickUseWheelItem> _items = [];
+    private readonly List<QuickUseCategorySlots<QuickUseWheelItem>.Candidate> _categoryCandidates = [];
     private readonly List<Item> _candidateItems = [];
     private readonly HashSet<Item> _seenItems = [];
+    private readonly Dictionary<Item, int> _categorySourceMasks = [];
     private readonly Dictionary<Item, EquipmentSlot> _sourceSlots = [];
     private readonly Dictionary<string, List<Item>> _groupedCandidates = new(StringComparer.Ordinal);
     private readonly HashSet<string> _favoriteTemplateIds = new(StringComparer.Ordinal);
     private RuntimeUiService _ui = null!;
 
     internal IReadOnlyList<QuickUseWheelItem> Items => _items;
+    internal IReadOnlyList<QuickUseCategorySlots<QuickUseWheelItem>.Candidate> CategoryCandidates => _categoryCandidates;
 
     internal bool HasQueuedItems => _items.Exists(static item => item.IsQueued);
 
@@ -71,6 +74,7 @@ internal sealed class QuickUseWheelInventory
     internal bool Populate(Player player)
     {
         _items.Clear();
+        _categoryCandidates.Clear();
         ClearWorkingSets();
         if (player is null || !player)
         {
@@ -108,9 +112,9 @@ internal sealed class QuickUseWheelInventory
             {
                 foreach (var item in inventory.GetItemsInSlots(Configuration.AllAllowedWeaponSlots))
                 {
-                    if (item is Weapon && _seenItems.Add(item))
+                    if (item is Weapon)
                     {
-                        _candidateItems.Add(item);
+                        AddCandidate(item, QuickUseCategory.Guns);
                     }
                 }
             }
@@ -120,10 +124,9 @@ internal sealed class QuickUseWheelInventory
                 foreach (var item in inventory.GetItemsInSlots(Configuration.AllAllowedMeleeSlots))
                 {
                     if (item is not null
-                        && item.GetItemComponent<KnifeComponent>() != null
-                        && _seenItems.Add(item))
+                        && item.GetItemComponent<KnifeComponent>() != null)
                     {
-                        _candidateItems.Add(item);
+                        AddCandidate(item, QuickUseCategory.Melee);
                     }
                 }
             }
@@ -132,9 +135,9 @@ internal sealed class QuickUseWheelInventory
             {
                 foreach (var item in inventory.GetItemsInSlots(Configuration.GrenadeThrowSlots.Value))
                 {
-                    if (item is ThrowWeap && _seenItems.Add(item))
+                    if (item is ThrowWeap)
                     {
-                        _candidateItems.Add(item);
+                        AddCandidate(item, QuickUseCategory.Grenades);
                     }
                 }
             }
@@ -143,9 +146,9 @@ internal sealed class QuickUseWheelInventory
             {
                 foreach (var item in inventory.GetItemsInSlots(Configuration.MedsSlots.Value))
                 {
-                    if (item is Meds && _seenItems.Add(item))
+                    if (item is Meds)
                     {
-                        _candidateItems.Add(item);
+                        AddCandidate(item, QuickUseCategory.AllMedical);
                     }
                 }
             }
@@ -154,9 +157,9 @@ internal sealed class QuickUseWheelInventory
             {
                 foreach (var item in inventory.GetItemsInSlots(Configuration.FoodDrinkSlots.Value))
                 {
-                    if (item is FoodDrink && _seenItems.Add(item))
+                    if (item is FoodDrink)
                     {
-                        _candidateItems.Add(item);
+                        AddCandidate(item, QuickUseCategory.FoodDrink);
                     }
                 }
             }
@@ -166,10 +169,9 @@ internal sealed class QuickUseWheelInventory
                 foreach (var item in inventory.GetItemsInSlots(Configuration.FlareSlots.Value))
                 {
                     if (item is not null
-                        && Configuration.FlareIds.Contains(item.TemplateId)
-                        && _seenItems.Add(item))
+                        && Configuration.FlareIds.Contains(item.TemplateId))
                     {
-                        _candidateItems.Add(item);
+                        AddCandidate(item, QuickUseCategory.Flares);
                     }
                 }
             }
@@ -207,6 +209,28 @@ internal sealed class QuickUseWheelInventory
             }
 
             _items.Sort(CompareWheelItems);
+            if (Configuration.HasQuickUseCategorySlots)
+            {
+                foreach (var item in _candidateItems)
+                {
+                    if (!controller.Examined(item)) continue;
+                    var mask = 0;
+                    foreach (var position in Configuration.QuickUseCategoryPositions)
+                    {
+                        if (HasCategorySource(item, position.Value)
+                            && QuickUseCategoryClassifier.Matches(item, position.Value))
+                        {
+                            mask |= 1 << (int)position.Value;
+                        }
+                    }
+                    if (mask == 0) continue;
+                    var singleItem = CreateWheelItem(player, [item]);
+                    if (!singleItem.IsUsable) continue;
+                    _categoryCandidates.Add(new QuickUseCategorySlots<QuickUseWheelItem>.Candidate(
+                        singleItem, item.Id, item.TemplateId.ToString(), singleItem.IsFavorite,
+                        singleItem.DelayInfo?.TotalDelay ?? 0f, mask));
+                }
+            }
             return true;
         }
         finally
@@ -218,13 +242,16 @@ internal sealed class QuickUseWheelInventory
     internal void ClearItems()
     {
         _items.Clear();
+        _categoryCandidates.Clear();
     }
 
     internal void Clear()
     {
         _items.Clear();
+        _categoryCandidates.Clear();
         _candidateItems.Clear();
         _seenItems.Clear();
+        _categorySourceMasks.Clear();
         _sourceSlots.Clear();
         _groupedCandidates.Clear();
     }
@@ -322,6 +349,11 @@ internal sealed class QuickUseWheelInventory
 
     private void AddWheelItem(Player player, IReadOnlyList<Item> groupedItems)
     {
+        _items.Add(CreateWheelItem(player, groupedItems));
+    }
+
+    private QuickUseWheelItem CreateWheelItem(Player player, IReadOnlyList<Item> groupedItems)
+    {
         var item = SelectRepresentativeItem(player, groupedItems);
         var isQueued = ItemAccessDelayPatch.IsQueuedForAccess(player, item);
         var isNextQueued = ItemAccessDelayPatch.IsNextQueuedItem(player, item);
@@ -347,7 +379,7 @@ internal sealed class QuickUseWheelInventory
         }
 
         var sourceSlot = _sourceSlots.GetValueOrDefault(item, EquipmentSlot.Pockets);
-        _items.Add(new QuickUseWheelItem(
+        return new QuickUseWheelItem(
             item,
             [..groupedItems],
             quantity,
@@ -361,7 +393,43 @@ internal sealed class QuickUseWheelInventory
             _favoriteTemplateIds.Contains(item.TemplateId.ToString()),
             sourceSlot,
             RuntimeUiService.GetSlotName(sourceSlot),
-            _ui.GetItemIcon(item)));
+            _ui.GetItemIcon(item));
+    }
+
+    internal Item? RevalidateCategoryItem(Player player, Item displayedItem, QuickUseCategory category)
+    {
+        // Repopulation rechecks configured source slots as well as current queue/action state.
+        // Never substitute a grouped or replacement item for the one the player confirmed.
+        if (!Populate(player)) return null;
+        foreach (var candidate in _categoryCandidates)
+        {
+            if (ReferenceEquals(candidate.Value.Item, displayedItem) && candidate.Matches(category))
+            {
+                return IsItemStillUsable(player, displayedItem) ? displayedItem : null;
+            }
+        }
+        return null;
+    }
+
+    private void AddCandidate(Item item, QuickUseCategory sourceCategory)
+    {
+        if (_seenItems.Add(item)) _candidateItems.Add(item);
+        _categorySourceMasks[item] = _categorySourceMasks.GetValueOrDefault(item) | (1 << (int)sourceCategory);
+    }
+
+    private bool HasCategorySource(Item item, QuickUseCategory category)
+    {
+        // Record admission per category before deduplication. A flare admitted by the
+        // grenade iterator must not bypass the separate flare source/visibility settings.
+        var sourceCategory = category switch
+        {
+            QuickUseCategory.Medkits or QuickUseCategory.LightBleedTreatment
+                or QuickUseCategory.HeavyBleedTreatment or QuickUseCategory.FractureTreatment
+                or QuickUseCategory.Surgery or QuickUseCategory.Painkillers or QuickUseCategory.Stimulants
+                => QuickUseCategory.AllMedical,
+            _ => category,
+        };
+        return (_categorySourceMasks.GetValueOrDefault(item) & (1 << (int)sourceCategory)) != 0;
     }
 
     private Item SelectRepresentativeItem(Player player, IReadOnlyList<Item> groupedItems)
@@ -596,6 +664,7 @@ internal sealed class QuickUseWheelInventory
     {
         _candidateItems.Clear();
         _seenItems.Clear();
+        _categorySourceMasks.Clear();
         _sourceSlots.Clear();
         _groupedCandidates.Clear();
     }

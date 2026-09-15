@@ -116,7 +116,7 @@ internal sealed class QuickUseWheelView
                 || Mathf.Abs(radialDirection.y) <= 0.001f && radialDirection.x >= 0f;
             var verticalDirection = textBelowIcon ? 1f : -1f;
             var iconOffset = new Vector2(0f, 31f * verticalDirection);
-            view.ItemRoot.gameObject.SetActive(true);
+            view.ItemRoot.gameObject.SetActive(!wheelItem.IsBlank);
             view.ItemRoot.localScale = Vector3.one;
             view.ItemRoot.anchoredPosition = radialDirection * IconRadius - iconOffset;
             view.ItemRoot.sizeDelta = new Vector2(labelWidth, 140f);
@@ -139,7 +139,7 @@ internal sealed class QuickUseWheelView
             view.State.color = wheelItem.IsQueued
                 ? QueuedNameColor
                 : new Color(0.72f, 0.74f, 0.72f, 1f);
-            view.State.gameObject.SetActive(false);
+            view.State.gameObject.SetActive(wheelItem.Category != QuickUseCategory.Unassigned && !wheelItem.Item.HasValue);
             view.Source.text = wheelItem.SourceName;
             view.Source.color = wheelItem.IsQueued
                 ? new Color(0.54f, 0.49f, 0.34f, 1f)
@@ -177,7 +177,7 @@ internal sealed class QuickUseWheelView
             var selected = index == selectedIndex;
             var view = _views[index];
             var wheelItem = items[pageStartIndex + index];
-            view.Segment.color = wheelItem.IsQueued
+            view.Segment.color = wheelItem.IsBlank ? NormalSegmentColor : wheelItem.IsQueued
                 ? QueuedSegmentColor
                 : !wheelItem.IsUsable
                     ? UnavailableSegmentColor
