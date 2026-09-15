@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TarkovDir Condition="'$(TarkovDir)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\</TarkovDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../UseItemsAnywhere/Patches/InventorySlotQueries.cs" Link="InventorySlotQueries.cs" />
+    <Compile Include="../../UseItemsAnywhere/Patches/InventoryQueryPatches.cs" Link="InventoryQueryPatches.cs" />
+    <Reference Include="0Harmony" HintPath="$(TarkovDir)BepInEx/core/0Harmony.dll" />
+    <Reference Include="Mono.Cecil" HintPath="$(TarkovDir)BepInEx/core/Mono.Cecil.dll" />
+  </ItemGroup>
+</Project>
