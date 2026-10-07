@@ -8,6 +8,9 @@
   <ItemGroup>
     <Compile Include="../../UseItemsAnywhere/Patches/InventorySlotQueries.cs" Link="InventorySlotQueries.cs" />
     <Compile Include="../../UseItemsAnywhere/Patches/InventoryQueryPatches.cs" Link="InventoryQueryPatches.cs" />
+    <Compile Include="../../UseItemsAnywhere/Patches/ContainerSlotsPatch.cs" Link="ContainerSlotsPatch.cs" />
+    <Compile Include="../../UseItemsAnywhere/Patches/PaymentSlotsPatch.cs" Link="PaymentSlotsPatch.cs" />
+    <Compile Include="../../UseItemsAnywhere/Patches/GrenadeThrowingSlotsPatch.cs" Link="GrenadeThrowingSlotsPatch.cs" />
     <Reference Include="0Harmony" HintPath="$(TarkovDir)BepInEx/core/0Harmony.dll" />
     <Reference Include="Mono.Cecil" HintPath="$(TarkovDir)BepInEx/core/Mono.Cecil.dll" />
   </ItemGroup>

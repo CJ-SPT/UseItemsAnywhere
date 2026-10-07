@@ -1,0 +1,28 @@
+<Project>
+  <PropertyGroup Condition="'$(IsUseItemsPlugin)' == 'true'">
+    <UseItemsArtifacts>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)artifacts', 'packages', '$(Configuration)'))</UseItemsArtifacts>
+    <UseItemsStage>$([MSBuild]::NormalizeDirectory('$(UseItemsArtifacts)', 'stage', '$(MSBuildProjectName)'))</UseItemsStage>
+  </PropertyGroup>
+  <Target Name="CollectUseItemsFiles" Condition="'$(IsUseItemsPlugin)' == 'true'">
+    <ItemGroup>
+      <UseItemsFile Include="$(TargetPath)" />
+      <UseItemsFile Include="$(MSBuildThisFileDirectory)LICENSE" />
+      <UseItemsFile Include="$(MSBuildThisFileDirectory)UseItemsAnywhere\Resources\quickusewheel;$(MSBuildThisFileDirectory)UseItemsAnywhere\Resources\itemusedelaytimer"
+                    Condition="'$(MSBuildProjectName)' == 'UseItemsAnywhere'" />
+    </ItemGroup>
+  </Target>
+  <Target Name="PackageUseItems" AfterTargets="Build" DependsOnTargets="CollectUseItemsFiles"
+          Condition="'$(IsUseItemsPlugin)' == 'true' And '$(PackageUseItemsAnywhere)' == 'true'">
+    <Error Condition="!$([System.String]::Copy('$(UseItemsStage)').StartsWith('$(MSBuildThisFileDirectory)artifacts\packages\'))" Text="Package staging must stay inside this repository's artifacts/packages directory." />
+    <RemoveDir Directories="$(UseItemsStage)" />
+    <Copy SourceFiles="@(UseItemsFile)" DestinationFolder="$(UseItemsStage)BepInEx\plugins\UseItemsAnywhere\" />
+    <ZipDirectory SourceDirectory="$(UseItemsStage)" DestinationFile="$(UseItemsArtifacts)$(MSBuildProjectName)-$(Version)-$(Configuration).zip" Overwrite="true" />
+  </Target>
+  <Target Name="DeployUseItems" AfterTargets="Build" DependsOnTargets="CollectUseItemsFiles"
+          Condition="'$(IsUseItemsPlugin)' == 'true' And '$(DeployOnBuild)' != 'false'">
+    <Copy SourceFiles="@(UseItemsFile)" DestinationFolder="$(TarkovDir)BepInEx\plugins\UseItemsAnywhere\" SkipUnchangedFiles="true"
+          Condition="'$(MSBuildProjectName)' == 'UseItemsAnywhere' Or Exists('$(TarkovDir)BepInEx\plugins\Fika\Fika.Core.dll')" />
+    <Copy SourceFiles="@(UseItemsFile)" DestinationFolder="$(TarkovHeadlessDir)\BepInEx\plugins\UseItemsAnywhere\" SkipUnchangedFiles="true"
+          Condition="Exists('$(TarkovHeadlessDir)\BepInEx') And ('$(MSBuildProjectName)' == 'UseItemsAnywhere' Or Exists('$(TarkovHeadlessDir)\BepInEx\plugins\Fika\Fika.Core.dll'))" />
+  </Target>
+</Project>

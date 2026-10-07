@@ -12,11 +12,12 @@ using UnityEngine;
 using UseItemsAnywhere.ItemUseDelayTimer;
 using UseItemsAnywhere.BackpackAccess;
 using UseItemsAnywhere.QuickUseWheel;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
 /// <summary>
-///     TODO: This will require Fika Sync at some point. Only handles basic items such as meds, food, water...
+///     Delays local requests before entering EFT/Fika's normal item-use path.
 /// </summary>
 internal sealed class ItemAccessDelayPatch : ModulePatch
 {
@@ -25,6 +26,27 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
     private static readonly Dictionary<Player, PendingAccess> PendingPlayers = [];
     private static readonly Dictionary<Player, WaitingAccess> WaitingForCurrentUse = [];
     private static readonly HashSet<Player> BypassPlayers = [];
+
+    private static readonly HashSet<BackpackAccessAnimation> Animations = [];
+    private static int _generation;
+
+    internal static void ResetSession()
+    {
+        _generation++;
+        ClearPendingItemAccess();
+        foreach (var pair in new List<KeyValuePair<Player, PendingAccess>>(PendingPlayers))
+        {
+            if (pair.Value.Routine != null)
+            {
+                if (pair.Key) pair.Key.StopCoroutine(pair.Value.Routine);
+                (pair.Value.Routine as IDisposable)?.Dispose();
+            }
+        }
+        PendingPlayers.Clear();
+        BypassPlayers.Clear();
+        foreach (var animation in Animations) animation.Finish();
+        Animations.Clear();
+    }
 
     internal static void ClearPendingItemAccess()
     {
@@ -123,7 +145,8 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         out Configuration.ItemAccessDelayInfo delayInfo)
     {
         delayInfo = default;
-        return Configuration.EnableSlotDelays.Value
+        return CoopRuntime.FeaturesEnabled && CoopRuntime.IsLocalPlayer(player)
+            && Configuration.ActiveRules.EnableDelays
             && ShouldDelay(item)
             && Configuration.TryGetItemAccessDelay(
                 player.InventoryController.Inventory,
@@ -138,6 +161,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         Callback<IHandsController> completeCallback,
         bool scheduled)
     {
+        if (!CoopRuntime.FeaturesEnabled || !CoopRuntime.IsLocalPlayer(player)) return false;
         var request = CreateRequest(player, item, completeCallback, scheduled);
         if (PendingPlayers.TryGetValue(player, out var pendingAccess))
         {
@@ -169,6 +193,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         Callback<IHandsController> completeCallback,
         bool scheduled)
     {
+        if (!CoopRuntime.FeaturesEnabled || !CoopRuntime.IsLocalPlayer(player)) return false;
         var request = CreateRequest(player, item, completeCallback, scheduled)
             .AfterCurrentItemIsUsed();
         if (PendingPlayers.TryGetValue(player, out var pendingAccess))
@@ -209,7 +234,8 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         Callback<IHandsController> completeCallback,
         bool scheduled)
     {
-        if (!Configuration.EnableSlotDelays.Value)
+        if (!CoopRuntime.FeaturesEnabled || !CoopRuntime.IsLocalPlayer(__instance)
+            || !Configuration.ActiveRules.EnableDelays)
         {
             return true;
         }
@@ -299,7 +325,8 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
     {
         var pendingAccess = new PendingAccess(request.Item, delayInfo);
         PendingPlayers.Add(player, pendingAccess);
-        player.StartCoroutine(ProceedAfterDelay(player, request, delayInfo, pendingAccess));
+        pendingAccess.Routine = ProceedAfterDelay(player, request, delayInfo, pendingAccess);
+        player.StartCoroutine(pendingAccess.Routine);
     }
 
     private static bool ShouldDelay(Item item)
@@ -333,13 +360,14 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         var healthController = player.HealthController;
         Action<EBodyPart, float, DamageInfo>? damageHandler = null;
         var completed = false;
+        var generation = _generation;
         try
         {
             if (healthController != null)
             {
                 damageHandler = (_, damage, _) =>
                 {
-                    if (Configuration.CancelAccessOnDamage.Value && damage > 0f)
+                    if (Configuration.ActiveRules.CancelOnDamage && damage > 0f)
                     {
                         CancelPendingAccess(player, pendingAccess);
                     }
@@ -348,6 +376,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             }
 
             backpackAnimation = BackpackAccessAnimation.Begin(player, request.Item, delayInfo);
+            if (backpackAnimation != null) Animations.Add(backpackAnimation);
 
             if (Configuration.ShowTimerPanel.Value)
             {
@@ -361,7 +390,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             var delayEndTime = Time.time + delayInfo.TotalDelay;
             while (Time.time < delayEndTime && !pendingAccess.IsCancelled)
             {
-                if (ShouldCancelForMovement(player))
+                if (!CoopRuntime.FeaturesEnabled || !CoopRuntime.IsLocalPlayer(player) || ShouldCancelForMovement(player))
                 {
                     CancelPendingAccess(player, pendingAccess);
                     break;
@@ -373,7 +402,8 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                 yield return null;
             }
 
-            if (pendingAccess.IsCancelled || !player)
+            if (pendingAccess.IsCancelled || generation != _generation
+                || !CoopRuntime.FeaturesEnabled || !CoopRuntime.IsLocalPlayer(player))
             {
                 yield break;
             }
@@ -391,6 +421,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                 WaitingForCurrentUse[player] = waitingAccess;
                 completeCallback = result =>
                 {
+                    if (generation != _generation) return;
                     request.CompleteCallback?.Invoke(result);
 
                     if (result.Failed || !player || result.Value is not IQuickUseItem quickUseItem)
@@ -407,6 +438,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
                     var restorePreviousItem = quickUseItem.GetOnUsedCallback();
                     quickUseItem.SetOnUsedCallback(useResult =>
                     {
+                        if (generation != _generation) return;
                         restorePreviousItem?.Invoke(useResult);
                         if (!WaitingForCurrentUse.TryGetValue(player, out var currentWaiting)
                             || !ReferenceEquals(currentWaiting, waitingAccess))
@@ -431,9 +463,14 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             var resultPresentation = presentation;
             var resultCallback = completeCallback;
             var resultBackpackAnimation = backpackAnimation;
+            var callbackConsumed = false;
             completeCallback = result =>
             {
+                if (callbackConsumed) return;
+                callbackConsumed = true;
                 resultBackpackAnimation?.RestoreHeldItem();
+                if (resultBackpackAnimation != null) Animations.Remove(resultBackpackAnimation);
+                if (generation != _generation) return;
                 resultPresentation?.Finish(result.Succeed);
                 resultCallback?.Invoke(result);
             };
@@ -458,6 +495,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             }
 
             backpackAnimation?.Finish();
+            if (backpackAnimation != null) Animations.Remove(backpackAnimation);
             presentation?.Finish(completed);
             BypassPlayers.Remove(player);
             if (!completed)
@@ -475,7 +513,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
             }
 
             var followUp = pendingAccess.FollowUp;
-            if (followUp.HasValue && player)
+            if (followUp.HasValue && generation == _generation && CoopRuntime.FeaturesEnabled && CoopRuntime.IsLocalPlayer(player))
             {
                 StartFollowUp(player, followUp.Value);
             }
@@ -491,7 +529,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
 
     private static bool ShouldCancelForMovement(Player player)
     {
-        return Configuration.CancelAccessOnMovement.Value
+        return Configuration.ActiveRules.CancelOnMovement
             && player
             && player.MovementContext is { } movementContext
             && movementContext.MovementDirection.sqrMagnitude > MovementInputThresholdSqr;
@@ -499,16 +537,17 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
 
     private static void StartFollowUp(Player player, PendingRequest request)
     {
+        if (!CoopRuntime.FeaturesEnabled || !CoopRuntime.IsLocalPlayer(player)) return;
         WaitingForCurrentUse.Remove(player);
-        if (Configuration.EnableSlotDelays.Value && request.DelayInfo.HasValue)
+        if (Configuration.ActiveRules.EnableDelays && request.DelayInfo.HasValue)
         {
             StartPendingAccess(player, request, request.DelayInfo.Value);
             return;
         }
 
         BypassPlayers.Add(player);
-        player.TryProceed(request.Item, request.CompleteCallback, request.Scheduled);
-        BypassPlayers.Remove(player);
+        try { player.TryProceed(request.Item, request.CompleteCallback, request.Scheduled); }
+        finally { BypassPlayers.Remove(player); }
     }
 
     private static PendingRequest CreateRequest(
@@ -530,6 +569,7 @@ internal sealed class ItemAccessDelayPatch : ModulePatch
         internal Item Item { get; set; } = item;
         internal Configuration.ItemAccessDelayInfo DelayInfo { get; } = delayInfo;
         internal bool IsCancelled;
+        internal IEnumerator? Routine;
         internal PendingRequest? FollowUp;
     }
 

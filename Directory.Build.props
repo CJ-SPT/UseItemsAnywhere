@@ -1,6 +1,120 @@
 <Project>
   <PropertyGroup>
     <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
     <AvaloniaVersion>11.0.0</AvaloniaVersion>
+    <IsUseItemsPlugin Condition="'$(MSBuildProjectName)' == 'UseItemsAnywhere' Or '$(MSBuildProjectName)' == 'UseItemsAnywhereFika'">true</IsUseItemsPlugin>
+    <DeployOnBuild Condition="'$(DeployOnBuild)' == ''">true</DeployOnBuild>
+    <PackageUseItemsAnywhere Condition="'$(PackageUseItemsAnywhere)' == ''">true</PackageUseItemsAnywhere>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(IsUseItemsPlugin)' == 'true'">
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <TarkovDir Condition="'$(TarkovDir)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..\..\'))</TarkovDir>
+    <TarkovHeadlessDir Condition="'$(TarkovHeadlessDir)' == ''">F:\SPT 4.1.x - Headless\</TarkovHeadlessDir>
+    <TarkovPluginsSPTDir>$(TarkovDir)BepInEx\plugins\spt\</TarkovPluginsSPTDir>
+    <TarkovManagedDir>$(TarkovDir)EscapeFromTarkov_Data\Managed\</TarkovManagedDir>
+    <TarkovBepInExCoreDir>$(TarkovDir)BepInEx\core\</TarkovBepInExCoreDir>
+    <FikaAssemblyPath Condition="'$(FikaAssemblyPath)' == ''">$(TarkovDir)BepInEx\plugins\Fika\Fika.Core.dll</FikaAssemblyPath>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(IsUseItemsPlugin)' == 'true'">
+    <!-- Tarkov/Unity -->
+    <Reference Private="false" Include="Assembly-CSharp">
+      <HintPath>$(TarkovManagedDir)Assembly-CSharp.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="ItemComponents.Types">
+      <HintPath>$(TarkovManagedDir)ItemComponent.Types.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="Comfort">
+      <HintPath>$(TarkovManagedDir)Comfort.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="Comfort.Unity">
+      <HintPath>$(TarkovManagedDir)Comfort.Unity.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="DissonanceVoip">
+      <HintPath>$(TarkovManagedDir)DissonanceVoip.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="DOTween">
+      <HintPath>$(TarkovManagedDir)DOTween.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="DOTween.Modules">
+      <HintPath>$(TarkovManagedDir)DOTween.Modules.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="Newtonsoft.Json">
+      <HintPath>$(TarkovManagedDir)Newtonsoft.Json.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="Sirenix.Serialization">
+      <HintPath>$(TarkovManagedDir)Sirenix.Serialization.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="Unity.TextMeshPro">
+      <HintPath>$(TarkovManagedDir)Unity.TextMeshPro.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine">
+      <HintPath>$(TarkovManagedDir)UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.AudioModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.AudioModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.CoreModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.PhysicModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.PhysicsModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.ImageConversionModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.IMGUIModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.IMGUIModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.UI">
+      <HintPath>$(TarkovManagedDir)UnityEngine.UI.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.UIModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.UIModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.AssetBundleModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.AssetBundleModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.AIModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.AIModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="Unity.Postprocessing.Runtimee">
+      <HintPath>$(TarkovManagedDir)Unity.Postprocessing.Runtime.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="UnityEngine.ParticleSystemModule">
+      <HintPath>$(TarkovManagedDir)UnityEngine.ParticleSystemModule.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="DissonanceVoip">
+      <HintPath>$(TarkovManagedDir)DissonanceVoip.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="bsg.console.core">
+      <HintPath>$(TarkovManagedDir)bsg.console.core.dll</HintPath>
+    </Reference>
+
+    <!-- Harmony/Bepinex -->
+    <Reference Private="false" Include="0Harmony">
+      <HintPath>$(TarkovBepInExCoreDir)0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="BepinEx">
+      <HintPath>$(TarkovBepInExCoreDir)BepInEx.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="BepinEx.Preloader">
+      <HintPath>$(TarkovBepInExCoreDir)BepInEx.Preloader.dll</HintPath>
+    </Reference>
+
+    <!-- SPT -->
+    <Reference Private="false" Include="spt-reflection">
+      <HintPath>$(TarkovPluginsSPTDir)spt-reflection.dll</HintPath>
+    </Reference>
+    <Reference Private="false" Include="spt-custom">
+      <HintPath>$(TarkovPluginsSPTDir)spt-custom.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>

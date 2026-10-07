@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using EFT.InventoryLogic;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -15,10 +16,10 @@ internal static class InventorySlotQueries
     }
 
     internal static void CollectReloadItems<TItem>(InventoryController controller, IList<TItem> items, Predicate<TItem>? predicate)
-        where TItem : Item => Collect(controller, Configuration.ReloadSlots.Value, items, predicate);
+        where TItem : Item => Collect(controller, CoopRuntime.FeaturesEnabled ? Configuration.ActiveRules.Slots(ItemCategory.Reload) : Inventory.FastAccessSlots, items, predicate);
 
     internal static void CollectGrenades<TItem>(InventoryController controller, IList<TItem> items, Predicate<TItem>? predicate)
-        where TItem : Item => Collect(controller, Configuration.GrenadeThrowSlots.Value, items, predicate);
+        where TItem : Item => Collect(controller, CoopRuntime.FeaturesEnabled ? Configuration.ActiveRules.Slots(ItemCategory.Grenades) : Inventory.FastAccessSlots, items, predicate);
 
     internal static void CollectNativeItems<TItem>(InventoryController controller, IList<TItem> items, Predicate<TItem>? predicate)
         where TItem : Item => Collect(controller, Inventory.FastAccessSlots, items, predicate);
@@ -31,6 +32,12 @@ internal static class InventorySlotQueries
         // cache or an unpopulated slot even when the enum value exists on the player.
         var slots = SelectExistingSlots(requestedSlots, equipment._cachedSlots);
         controller.GetAcceptableItemsNonAlloc(slots, items, predicate, null);
+    }
+
+    internal static Slot? ExistingSlot(InventoryEquipment equipment, EquipmentSlot slot)
+    {
+        var index = (int)slot;
+        return index >= 0 && index < equipment._cachedSlots.Length ? equipment._cachedSlots[index] : null;
     }
 
     internal static EquipmentSlot[] SelectExistingSlots(IEnumerable<EquipmentSlot> requestedSlots, Slot[] cachedSlots)

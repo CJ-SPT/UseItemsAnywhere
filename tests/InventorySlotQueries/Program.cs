@@ -62,6 +62,26 @@ Check(playerMags.Count == 0, "Empty configuration does not fall back to other sl
 Check(ReferenceEquals(global, Inventory.FastAccessSlots) && global.SequenceEqual(originalValues),
     "Player, UI, and bot queries never alter the shared array or its reference");
 
+// Session fallback must apply to query replacements and all expanded slot getters.
+IReadOnlyList<Slot> slotResult = [];
+Check(!ContainerSlotsPatch.PatchPrefix(bot.Inventory.Equipment, ref slotResult) && slotResult.Count == 4,
+    "Expanded container getter skips missing ArmBand on bot equipment");
+Check(!PaymentSlotsPatch.PatchPrefix(bot.Inventory.Equipment, ref slotResult) && slotResult.Count == 4,
+    "Expanded payment getter skips missing ArmBand on bot equipment");
+Check(!GrenadeThrowingSlotsPatch.PatchPrefix(bot.Inventory.Equipment, ref slotResult) && slotResult.Count == 1,
+    "Expanded grenade getter skips missing configured slots");
+UseItemsAnywhere.Integration.CoopRuntime.FeaturesEnabled = false;
+var nativeResult = slotResult;
+Check(ContainerSlotsPatch.PatchPrefix(bot.Inventory.Equipment, ref slotResult)
+    && PaymentSlotsPatch.PatchPrefix(bot.Inventory.Equipment, ref slotResult)
+    && GrenadeThrowingSlotsPatch.PatchPrefix(bot.Inventory.Equipment, ref slotResult)
+    && ReferenceEquals(slotResult, nativeResult), "Disabled getter patches leave native results untouched");
+var nativeItems = new List<Magazine>();
+InventorySlotQueries.CollectReloadItems(player, nativeItems, null);
+Check(nativeItems.Select(item => item.Id).SequenceEqual(new[] { "Pockets", "TacticalVest", "ArmBand" }),
+    "Disabled reload query uses native/shared slots, not personal rules");
+UseItemsAnywhere.Integration.CoopRuntime.FeaturesEnabled = true;
+
 var weirdSlots = new[] { (EquipmentSlot)(-1), EquipmentSlot.Pockets, EquipmentSlot.Dogtag, EquipmentSlot.Pockets,
     EquipmentSlot.ArmBand, (EquipmentSlot)99, EquipmentSlot.TacticalVest };
 Check(InventorySlotQueries.SelectExistingSlots(weirdSlots, bot.Inventory.Equipment._cachedSlots)

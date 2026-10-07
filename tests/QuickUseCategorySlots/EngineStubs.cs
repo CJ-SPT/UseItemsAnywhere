@@ -132,6 +132,7 @@ namespace UseItemsAnywhere
     internal sealed class Setting<T>(T value) { public T Value = value; }
     internal static class Configuration
     {
+        internal static readonly Integration.TestRules ActiveRules = new();
         internal enum GroupedItemSelectionMode { LowestResourceFirst, HighestResourceFirst, FastestAccessFirst }
         internal readonly record struct ItemAccessDelayInfo(float TotalDelay);
         internal static Setting<bool> QuickUseShowPrimAndSecWeapons = new(true), QuickUseShowMelee = new(true),
@@ -149,5 +150,15 @@ namespace UseItemsAnywhere
             GrenadeThrowSlots = new([..Enum.GetValues<EquipmentSlot>()]),
             FoodDrinkSlots = new([..Enum.GetValues<EquipmentSlot>()]),
             FlareSlots = new([..Enum.GetValues<EquipmentSlot>()]);
+    }
+}
+
+namespace UseItemsAnywhere.Integration
+{
+    internal enum ItemCategory { Grenades, Meds, FoodDrink, Flares }
+    internal static class CoopRuntime { internal static bool FeaturesEnabled = true; }
+    internal sealed class TestRules
+    {
+        internal IReadOnlyList<EFT.InventoryLogic.EquipmentSlot> Slots(ItemCategory category) => category switch { ItemCategory.Grenades => Configuration.GrenadeThrowSlots.Value, ItemCategory.Meds => Configuration.MedsSlots.Value, ItemCategory.FoodDrink => Configuration.FoodDrinkSlots.Value, _ => Configuration.FlareSlots.Value };
     }
 }

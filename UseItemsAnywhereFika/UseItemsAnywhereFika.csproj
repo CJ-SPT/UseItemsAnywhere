@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <AssemblyName>UseItemsAnywhereFika</AssemblyName>
+    <RootNamespace>UseItemsAnywhereFika</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\UseItemsAnywhere\UseItemsAnywhere.csproj" Private="false" />
+    <Reference Include="Fika.Core" HintPath="$(FikaAssemblyPath)" Private="false" />
+  </ItemGroup>
+  <Target Name="CheckFikaReference" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(FikaAssemblyPath)')" Text="Fika.Core.dll was not found. Set FikaAssemblyPath to a compatible Fika reference DLL, or build the core project separately." />
+  </Target>
+</Project>

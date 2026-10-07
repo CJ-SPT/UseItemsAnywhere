@@ -1,10 +1,11 @@
-﻿using System.Linq;
+using System.Linq;
 using System;
 using System.Reflection;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
 using UseItemsAnywhere.Extensions;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -18,29 +19,31 @@ public class IsAtReachablePlace : ModulePatch
     [PatchPostfix]
     private static void Postfix(InventoryController __instance, ref bool __result, Item item)
     {
+        if (!CoopRuntime.FeaturesEnabled) return;
+
         switch (item)
         {
             case Weapon weap:
                 if (Configuration.FlareIds.Contains(weap.TemplateId))
                 {
-                    __result = __instance.Inventory.SlotsContainItem(Configuration.FlareSlots.Value, weap);
+                    __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Flares), weap);
                     return;
                 }
                 
                 __result = __instance.Inventory.SlotsContainItem(Configuration.AllAllowedWeaponSlots, item);
                 return;
             case ThrowWeap:
-                __result = __instance.Inventory.SlotsContainItem(Configuration.GrenadeThrowSlots.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Grenades), item);
                 return;
             case Ammo:
             case Magazine:
-                __result = __instance.Inventory.SlotsContainItem(Configuration.ReloadSlots.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Reload), item);
                 return;
             case Meds:
-                __result = __instance.Inventory.SlotsContainItem(Configuration.MedsSlots.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Meds), item);
                 return;
             case FoodDrink:
-                __result = __instance.Inventory.SlotsContainItem(Configuration.FoodDrinkSlots.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.FoodDrink), item);
                 return;
             default:
                 if (item.GetItemComponent<KnifeComponent>() != null)
@@ -50,7 +53,7 @@ public class IsAtReachablePlace : ModulePatch
                 }
                 
                 
-                __result = __instance.Inventory.SlotsContainItem(Configuration.AllOtherItems.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Other), item);
                 return;
         }
     }
@@ -62,7 +65,7 @@ public class IsAtReachablePlace : ModulePatch
         ref bool __result,
         Item item)
     {
-        if (__exception is not NullReferenceException
+        if (!CoopRuntime.FeaturesEnabled || __exception is not NullReferenceException
             || __exception.StackTrace?.Contains(
                 "PackNStrap.Helpers.Common.IsItemInReachableLocation") != true)
         {

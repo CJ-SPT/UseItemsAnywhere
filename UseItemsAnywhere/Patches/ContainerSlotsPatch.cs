@@ -1,9 +1,10 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -20,15 +21,16 @@ public class ContainerSlotsPatch : ModulePatch
     [PatchPrefix]
     public static bool PatchPrefix(InventoryEquipment __instance, ref IReadOnlyList<Slot> __result)
     {
-        __instance._containerSlots ??= new List<Slot>
+        if (!CoopRuntime.FeaturesEnabled) return true;
+
+        __result = new Slot?[]
         {
-            __instance.GetSlot(EquipmentSlot.Backpack),
-            __instance.GetSlot(EquipmentSlot.TacticalVest),
-            __instance.GetSlot(EquipmentSlot.Pockets),
-            __instance.GetSlot(EquipmentSlot.ArmBand),
-            __instance.GetSlot(EquipmentSlot.SecuredContainer),
-        };
-        __result = __instance._containerSlots;
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.Backpack),
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.TacticalVest),
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.Pockets),
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.ArmBand),
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.SecuredContainer),
+        }.OfType<Slot>().ToArray();
         return false;
     }
 }

@@ -4,6 +4,7 @@ using EFT.InputSystem;
 using HarmonyLib;
 using SPT.Reflection.Patching;
 using UseItemsAnywhere.QuickUseWheel;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -17,9 +18,9 @@ internal sealed class QuickUseWheelInputPatch : ModulePatch
     }
 
     [PatchPrefix]
-    private static bool Prefix(ref InputNode.ETranslateResult __result)
+    private static bool Prefix(GamePlayerOwner __instance, ref InputNode.ETranslateResult __result)
     {
-        if (!QuickUseWheelController.InputBlocked)
+        if (!CoopRuntime.IsLocalPlayer(__instance.Player) || !QuickUseWheelController.InputBlocked)
         {
             return true;
         }

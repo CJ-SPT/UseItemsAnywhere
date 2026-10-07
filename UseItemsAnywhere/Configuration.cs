@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using BepInEx.Configuration;
@@ -7,6 +7,7 @@ using EFT;
 using EFT.InventoryLogic;
 using UnityEngine;
 using UseItemsAnywhere.QuickUseWheel;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere;
 
@@ -30,10 +31,10 @@ public static class Configuration
     public static readonly HashSet<EquipmentSlot> DefaultWeaponSlots =
         [EquipmentSlot.FirstPrimaryWeapon, EquipmentSlot.SecondPrimaryWeapon, EquipmentSlot.Holster];
     private static ConfigEntry<List<EquipmentSlot>> _weaponSlots = null!; 
-    public static HashSet<EquipmentSlot> AllAllowedWeaponSlots => [..DefaultWeaponSlots, .._weaponSlots.Value];
+    public static HashSet<EquipmentSlot> AllAllowedWeaponSlots => [..ActiveRules.Slots(ItemCategory.Weapons)];
     public static ConfigEntry<List<EquipmentSlot>> GrenadeThrowSlots = null!;
     private static ConfigEntry<List<EquipmentSlot>> _meleeSlots = null!;
-    public static HashSet<EquipmentSlot> AllAllowedMeleeSlots => [EquipmentSlot.Scabbard, .._meleeSlots.Value];
+    public static HashSet<EquipmentSlot> AllAllowedMeleeSlots => [..ActiveRules.Slots(ItemCategory.Melee)];
     public static ConfigEntry<List<EquipmentSlot>> FlareSlots = null!; 
     public static ConfigEntry<List<EquipmentSlot>> ReloadSlots = null!;
     public static ConfigEntry<List<EquipmentSlot>> MedsSlots = null!;
@@ -109,6 +110,7 @@ public static class Configuration
         InitQuickUseWheel(configFile);
         
         RecalcOrder();
+        configFile.SettingChanged += (_, _) => _localRules = null;
     }
 
     private static void InitQuickUseWheel(ConfigFile configFile)
@@ -550,18 +552,18 @@ public static class Configuration
     
     internal static bool TryGetItemAccessDelay(Inventory inventory, Item item, out ItemAccessDelayInfo delayInfo)
     {
-        foreach (var (slot, delayConfiguration) in SlotAccessDelayConfigurations)
+        foreach (var (slot, delay) in ActiveRules.Delays)
         {
             if (inventory.GetItemsInSlots([slot]).Contains(item))
             {
                 var nestingDepth = slot == EquipmentSlot.Backpack
                     ? GetBackpackNestingDepth(inventory, item)
                     : 0;
-                var nestingDelay = nestingDepth * _additionalContainerNestingDelay.Value;
+                var nestingDelay = nestingDepth * ActiveRules.NestingDelay;
                 delayInfo = new ItemAccessDelayInfo(
-                    delayConfiguration.Value + nestingDelay,
+                    delay + nestingDelay,
                     slot,
-                    delayConfiguration.Value,
+                    delay,
                     nestingDepth,
                     nestingDelay);
                 return true;
@@ -571,6 +573,29 @@ public static class Configuration
         delayInfo = default;
         return false;
     }
+
+    private static GameplayRules? _localRules;
+    public static GameplayRules ActiveRules => CoopRuntime.Session.Rules ?? (_localRules ??= CaptureGameplayRules());
+
+    public static GameplayRules CaptureGameplayRules() => new(new GameplayRulesData
+    {
+        Slots = new()
+        {
+            [ItemCategory.Weapons] = [..DefaultWeaponSlots, .._weaponSlots.Value],
+            [ItemCategory.Melee] = [EquipmentSlot.Scabbard, .._meleeSlots.Value],
+            [ItemCategory.Grenades] = [..GrenadeThrowSlots.Value],
+            [ItemCategory.Flares] = [..FlareSlots.Value],
+            [ItemCategory.Reload] = [..ReloadSlots.Value],
+            [ItemCategory.Meds] = [..MedsSlots.Value],
+            [ItemCategory.FoodDrink] = [..FoodDrinkSlots.Value],
+            [ItemCategory.Other] = [..AllOtherItems.Value],
+        },
+        Delays = SlotAccessDelayConfigurations.ToDictionary(pair => pair.Key, pair => pair.Value.Value),
+        EnableDelays = EnableSlotDelays.Value,
+        NestingDelay = _additionalContainerNestingDelay.Value,
+        CancelOnMovement = CancelAccessOnMovement.Value,
+        CancelOnDamage = CancelAccessOnDamage.Value,
+    });
 
     private static int GetBackpackNestingDepth(Inventory inventory, Item item)
     {

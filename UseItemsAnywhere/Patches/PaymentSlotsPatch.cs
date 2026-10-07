@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+using System.Linq;
+using System.Collections.Generic;
 using System.Reflection;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -19,16 +21,17 @@ public class PaymentSlotsPatch : ModulePatch
     [PatchPrefix]
     public static bool PatchPrefix(InventoryEquipment __instance, ref IReadOnlyList<Slot> __result)
     {
-        __instance._paymentSlots ??= new List<Slot>
-        {
-            __instance.GetSlot(EquipmentSlot.Backpack),
-            __instance.GetSlot(EquipmentSlot.TacticalVest),
-            __instance.GetSlot(EquipmentSlot.Pockets),
-            __instance.GetSlot(EquipmentSlot.SecuredContainer),
-            __instance.GetSlot(EquipmentSlot.ArmBand),
-        };
+        if (!CoopRuntime.FeaturesEnabled) return true;
 
-        __result = __instance._paymentSlots;
+        __result = new Slot?[]
+        {
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.Backpack),
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.TacticalVest),
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.Pockets),
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.SecuredContainer),
+            InventorySlotQueries.ExistingSlot(__instance, EquipmentSlot.ArmBand),
+        }.OfType<Slot>().ToArray();
+
         return false;
     }
 }

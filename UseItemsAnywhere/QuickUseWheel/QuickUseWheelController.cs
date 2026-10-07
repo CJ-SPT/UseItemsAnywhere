@@ -8,6 +8,7 @@ using EFT.UI;
 using UnityEngine;
 using UseItemsAnywhere.Patches;
 using UseItemsAnywhere.UI;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.QuickUseWheel;
 
@@ -87,9 +88,14 @@ internal sealed class QuickUseWheelController
 
     internal void Update()
     {
+        if (!CoopRuntime.FeaturesEnabled)
+        {
+            ResetSession();
+            return;
+        }
         _categorySelectionChangedThisUpdate = false;
         var hasPlayer = TryGetLocalPlayer(out var contextPlayer, out _);
-        _categorySlots.SetContext(Singleton<IBotGame>.Instance,
+        _categorySlots.SetContext(Singleton<AbstractGame>.Instance,
             hasPlayer && contextPlayer.HealthController?.IsAlive == true ? contextPlayer : null);
         var itemWheelEnabled = Configuration.EnableQuickUseWheel.Value;
         var deviceWheelEnabled = Configuration.EnableWeaponDeviceWheel.Value;
@@ -187,6 +193,18 @@ internal sealed class QuickUseWheelController
                 }
             }
         }
+    }
+
+    internal void ResetSession()
+    {
+        Close(false);
+        ResetShortcutGesture();
+        InputBlocked = false;
+        _pendingOpenRequest = null;
+        _categorySlots.SetContext(null, null);
+        _inventory.Clear();
+        _deviceInventory.Clear();
+        _entries.Clear();
     }
 
     internal void OnDestroy()
@@ -435,7 +453,7 @@ internal sealed class QuickUseWheelController
             {
                 return false;
             }
-            _categorySlots.SetContext(Singleton<IBotGame>.Instance, _player);
+            _categorySlots.SetContext(Singleton<AbstractGame>.Instance, _player);
             for (var slot = 0; slot < QuickUseWheelPages.CategorySlotCount; slot++)
             {
                 var category = Configuration.QuickUseCategoryPositions[slot].Value;
@@ -974,13 +992,13 @@ internal sealed class QuickUseWheelController
     {
         player = null!;
         playerOwner = null!;
-        if (Singleton<IBotGame>.Instance is not LocalGame localGame || !localGame.PlayerOwner)
+        if (Singleton<AbstractGame>.Instance is not BaseLocalGame<EftGamePlayerOwner> localGame || !localGame.PlayerOwner)
         {
             return false;
         }
         playerOwner = localGame.PlayerOwner;
         player = playerOwner.Player;
-        return player is not null && player;
+        return CoopRuntime.FeaturesEnabled && CoopRuntime.IsLocalPlayer(player);
     }
 
     private static int Mod(int value, int modulo) => (value % modulo + modulo) % modulo;

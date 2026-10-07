@@ -2,6 +2,7 @@ using Comfort.Common;
 using EFT;
 using EFT.InventoryLogic;
 using UseItemsAnywhere.UI;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.ItemUseDelayTimer;
 
@@ -119,7 +120,7 @@ internal sealed class ItemUseDelayTimerController
         _view.ShowResult(completed);
     }
 
-    private void HideImmediately()
+    internal void HideImmediately()
     {
         _activePresentationId = 0;
         _player = null;
@@ -128,10 +129,6 @@ internal sealed class ItemUseDelayTimerController
 
     private static bool IsCurrentLocalPlayer(Player? player)
     {
-        return player is not null
-            && player
-            && Singleton<IBotGame>.Instance is LocalGame localGame
-            && localGame.PlayerOwner
-            && ReferenceEquals(localGame.PlayerOwner.Player, player);
+        return CoopRuntime.FeaturesEnabled && CoopRuntime.IsLocalPlayer(player);
     }
 }

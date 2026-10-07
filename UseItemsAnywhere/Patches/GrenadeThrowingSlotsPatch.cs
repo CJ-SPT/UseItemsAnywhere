@@ -1,9 +1,10 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -22,6 +23,8 @@ internal class GrenadeThrowingSlotsPatch : ModulePatch
     [PatchPrefix]
     public static bool PatchPrefix(InventoryEquipment __instance, ref IReadOnlyList<Slot> __result)
     {
+        if (!CoopRuntime.FeaturesEnabled) return true;
+
         if (_grenadeThrowingSlots == null)
         {
             _grenadeThrowingSlots = [];
@@ -31,9 +34,10 @@ internal class GrenadeThrowingSlotsPatch : ModulePatch
             _grenadeThrowingSlots.Clear();
         }
         
-        foreach (var eSlot in Configuration.GrenadeThrowSlots.Value)
+        foreach (var eSlot in Configuration.ActiveRules.Slots(ItemCategory.Grenades))
         {
-            _grenadeThrowingSlots.Add(__instance.GetSlot(eSlot));
+            var slot = InventorySlotQueries.ExistingSlot(__instance, eSlot);
+            if (slot != null) _grenadeThrowingSlots.Add(slot);
         }
         
         __result = [.._grenadeThrowingSlots];

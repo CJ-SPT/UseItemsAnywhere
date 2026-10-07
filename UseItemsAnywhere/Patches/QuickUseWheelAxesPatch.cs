@@ -3,6 +3,7 @@ using EFT;
 using HarmonyLib;
 using SPT.Reflection.Patching;
 using UseItemsAnywhere.QuickUseWheel;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -16,10 +17,10 @@ internal sealed class QuickUseWheelAxesPatch : ModulePatch
     }
 
     [PatchPrefix]
-    private static bool Prefix()
+    private static bool Prefix(GamePlayerOwner __instance)
     {
         // The wheel reads Unity's raw mouse axes directly. Suppressing EFT's
         // axis translation keeps radial selection active without moving the camera.
-        return !QuickUseWheelController.InputBlocked;
+        return !CoopRuntime.IsLocalPlayer(__instance.Player) || !QuickUseWheelController.InputBlocked;
     }
 }

@@ -5,6 +5,7 @@ using EFT.InventoryLogic;
 using UnityEngine;
 using UseItemsAnywhere.Patches;
 using UseItemsAnywhere.UI;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.QuickUseWheel;
 
@@ -133,7 +134,7 @@ internal sealed class QuickUseWheelInventory
 
             if (Configuration.QuickUseShowGrenades.Value)
             {
-                foreach (var item in inventory.GetItemsInSlots(Configuration.GrenadeThrowSlots.Value))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.ActiveRules.Slots(ItemCategory.Grenades)))
                 {
                     if (item is ThrowWeap)
                     {
@@ -144,7 +145,7 @@ internal sealed class QuickUseWheelInventory
 
             if (Configuration.QuickUseShowMeds.Value)
             {
-                foreach (var item in inventory.GetItemsInSlots(Configuration.MedsSlots.Value))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.ActiveRules.Slots(ItemCategory.Meds)))
                 {
                     if (item is Meds)
                     {
@@ -155,7 +156,7 @@ internal sealed class QuickUseWheelInventory
 
             if (Configuration.QuickUseShowFoodDrink.Value)
             {
-                foreach (var item in inventory.GetItemsInSlots(Configuration.FoodDrinkSlots.Value))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.ActiveRules.Slots(ItemCategory.FoodDrink)))
                 {
                     if (item is FoodDrink)
                     {
@@ -166,7 +167,7 @@ internal sealed class QuickUseWheelInventory
 
             if (Configuration.QuickUseShowFlares.Value)
             {
-                foreach (var item in inventory.GetItemsInSlots(Configuration.FlareSlots.Value))
+                foreach (var item in inventory.GetItemsInSlots(Configuration.ActiveRules.Slots(ItemCategory.Flares)))
                 {
                     if (item is not null
                         && Configuration.FlareIds.Contains(item.TemplateId))

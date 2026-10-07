@@ -1,9 +1,10 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using EFT.InventoryLogic;
 using HarmonyLib;
 using SPT.Reflection.Patching;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -23,8 +24,10 @@ internal class GetThrowablePriorityGrenadesListPatch : ModulePatch
         InventoryController inventoryController
     )
     {
-        var list = Configuration.GrenadeThrowSlots.Value
-            .Select(slot => inventoryController.Inventory.Equipment.GetSlot(slot).ContainedItem)
+        if (!CoopRuntime.FeaturesEnabled) return true;
+
+        var list = Configuration.ActiveRules.Slots(ItemCategory.Grenades)
+            .Select(slot => InventorySlotQueries.ExistingSlot(inventoryController.Inventory.Equipment, slot)?.ContainedItem)
             .OfType<CompoundItem>()
             .Distinct()
             .ToList();

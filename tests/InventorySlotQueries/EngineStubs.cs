@@ -11,6 +11,9 @@ namespace EFT.InventoryLogic
     public sealed class InventoryEquipment(int size)
     {
         public Slot[] _cachedSlots = new Slot[size];
+        public IReadOnlyList<Slot> ContainerSlots => [];
+        public IReadOnlyList<Slot> PaymentSlots => [];
+        public IReadOnlyList<Slot> GrenadeThrowingSlots => [];
         public Slot GetSlot(EquipmentSlot slot) => _cachedSlots[(int)slot];
     }
     public sealed class Inventory(int size)
@@ -46,6 +49,7 @@ namespace UseItemsAnywhere
     internal sealed class Setting<T>(T value) { internal T Value = value; }
     internal static class Configuration
     {
+        internal static readonly Integration.TestRules ActiveRules = new();
         internal static Setting<List<EFT.InventoryLogic.EquipmentSlot>> ReloadSlots = new([]), GrenadeThrowSlots = new([]);
     }
 }
@@ -80,3 +84,19 @@ namespace EFT.UI
 public class BotReload { public void GetMagazineForReload() { } public void AddAmmoToMagazines() { } }
 public class BotReloadOnlyBarrel { public void CanReload() { } }
 public class BotReloadRevolver { public void CanReload() { } }
+
+namespace UseItemsAnywhere.Integration
+{
+    internal enum ItemCategory { Reload, Grenades }
+    internal static class CoopRuntime { internal static bool FeaturesEnabled = true; }
+    internal sealed class TestRules
+    {
+        internal IReadOnlyList<EFT.InventoryLogic.EquipmentSlot> Slots(ItemCategory category) => category == ItemCategory.Reload ? Configuration.ReloadSlots.Value : Configuration.GrenadeThrowSlots.Value;
+    }
+}
+
+namespace SPT.Reflection.Patching
+{
+    public abstract class ModulePatch { protected abstract System.Reflection.MethodBase GetTargetMethod(); }
+    public class PatchPrefixAttribute : Attribute { }
+}

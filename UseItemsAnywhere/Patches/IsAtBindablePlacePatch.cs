@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System;
 using System.Reflection;
@@ -8,6 +8,7 @@ using HarmonyLib;
 using MultiFlare;
 using SPT.Reflection.Patching;
 using UseItemsAnywhere.Extensions;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.Patches;
 
@@ -24,6 +25,8 @@ public class IsAtBindablePlace : ModulePatch
     [PatchPostfix]
     private static void Postfix(InventoryController __instance, ref bool __result, Item item)
     {
+        if (!CoopRuntime.FeaturesEnabled) return;
+
         if (item is CompoundItem compoundItem && compoundItem.MissingVitalParts.Any())
         {
             __result = false;
@@ -40,24 +43,24 @@ public class IsAtBindablePlace : ModulePatch
             case Weapon weap:
                 if (Configuration.FlareIds.Contains(weap.TemplateId))
                 {
-                    __result = __instance.Inventory.SlotsContainItem(Configuration.FlareSlots.Value, weap);
+                    __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Flares), weap);
                     return;
                 }
                 
                 __result = __instance.Inventory.SlotsContainItem(Configuration.AllAllowedWeaponSlots, item);
                 return;
             case ThrowWeap:
-                __result = __instance.Inventory.SlotsContainItem(Configuration.GrenadeThrowSlots.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Grenades), item);
                 return;
             case Ammo:
             case Magazine:
-                __result = __instance.Inventory.SlotsContainItem(Configuration.ReloadSlots.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Reload), item);
                 return;
             case Meds:
-                __result = __instance.Inventory.SlotsContainItem(Configuration.MedsSlots.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Meds), item);
                 return;
             case FoodDrink:
-                __result = __instance.Inventory.SlotsContainItem(Configuration.FoodDrinkSlots.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.FoodDrink), item);
                 return;
             default:
                 if (item.GetItemComponent<KnifeComponent>() != null)
@@ -66,7 +69,7 @@ public class IsAtBindablePlace : ModulePatch
                     return;
                 }
                 
-                __result = __instance.Inventory.SlotsContainItem(Configuration.AllOtherItems.Value, item);
+                __result = __instance.Inventory.SlotsContainItem(Configuration.ActiveRules.Slots(ItemCategory.Other), item);
                 return;
         }
     }
@@ -78,7 +81,7 @@ public class IsAtBindablePlace : ModulePatch
         ref bool __result,
         Item item)
     {
-        if (__exception is not NullReferenceException
+        if (!CoopRuntime.FeaturesEnabled || __exception is not NullReferenceException
             || __exception.StackTrace?.Contains(
                 "PackNStrap.Helpers.Common.IsItemInReachableLocation") != true)
         {

@@ -6,6 +6,7 @@ using EFT.CameraControl;
 using EFT.InventoryLogic;
 using EFT.UI;
 using UnityEngine;
+using UseItemsAnywhere.Integration;
 
 namespace UseItemsAnywhere.BackpackAccess;
 
@@ -83,7 +84,8 @@ internal sealed class BackpackAccessAnimation
         Item accessedItem,
         Configuration.ItemAccessDelayInfo delayInfo)
     {
-        if (!Configuration.AnimateBackpackAccess.Value
+        if (!CoopRuntime.FeaturesEnabled || !CoopRuntime.IsLocalPlayer(player)
+            || !Configuration.AnimateBackpackAccess.Value
             || delayInfo.SourceSlot != EquipmentSlot.Backpack
             || delayInfo.TotalDelay <= 0f
             || !player
